@@ -1,0 +1,7 @@
+README
+.env
+.vscode
+.idea
+.DS_Store
+dist
+node_modules
