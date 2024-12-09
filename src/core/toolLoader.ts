@@ -1,67 +1,21 @@
 import { BaseTool } from "../tools/BaseTool.js";
-import { dirname, join } from "path";
+import { join, dirname } from "path";
 import { promises as fs } from "fs";
-import { statSync } from "fs";
-import { fileURLToPath } from "url";
-import { cwd } from "process";
 import { logger } from "./Logger.js";
 
-export interface ToolLoaderOptions {
-  toolsDir?: string;
-  exclude?: string[];
-}
-
 export class ToolLoader {
-  private toolsDir: string;
-  private exclude: string[];
+  private readonly TOOLS_DIR: string;
+  private readonly EXCLUDED_FILES = ["BaseTool.js", "*.test.js", "*.spec.js"];
 
-  constructor(options: ToolLoaderOptions = {}) {
-    this.exclude = options.exclude || ["BaseTool.js", "*.test.js", "*.spec.js"];
-    this.toolsDir = this.resolveToolsDir(options.toolsDir);
-    logger.debug(`Initialized ToolLoader with directory: ${this.toolsDir}`);
-  }
-
-  private resolveToolsDir(toolsDir?: string): string {
-    if (toolsDir) {
-      logger.debug(`Using provided tools directory: ${toolsDir}`);
-      return toolsDir;
-    }
-
-    const currentFilePath = fileURLToPath(import.meta.url);
-    const currentDir = dirname(currentFilePath);
-    const possiblePaths = [
-      join(currentDir, "..", "tools"),
-      join(currentDir, "..", "..", "tools"),
-      join(cwd(), "dist", "tools"),
-      join(cwd(), "build", "tools"),
-      join(cwd(), "tools"),
-    ];
-
-    logger.debug(
-      `Searching for tools in possible paths:\n${possiblePaths.join("\n")}`
-    );
-
-    for (const path of possiblePaths) {
-      try {
-        if (statSync(path).isDirectory()) {
-          logger.debug(`Found existing tools directory: ${path}`);
-          return path;
-        }
-      } catch (e) {
-        logger.debug(`Path ${path} not accessible`);
-      }
-    }
-
-    const fallbackPath = join(cwd(), "dist", "tools");
-    logger.debug(
-      `No valid tools directory found, falling back to: ${fallbackPath}`
-    );
-    return fallbackPath;
+  constructor() {
+    const mainModulePath = process.argv[1];
+    this.TOOLS_DIR = join(dirname(mainModulePath), "tools");
+    logger.debug(`Initialized ToolLoader with directory: ${this.TOOLS_DIR}`);
   }
 
   private isToolFile(file: string): boolean {
     if (!file.endsWith(".js")) return false;
-    const isExcluded = this.exclude.some((pattern) => {
+    const isExcluded = this.EXCLUDED_FILES.some((pattern) => {
       if (pattern.includes("*")) {
         const regex = new RegExp(pattern.replace("*", ".*"));
         return regex.test(file);
@@ -94,22 +48,22 @@ export class ToolLoader {
 
   async loadTools(): Promise<BaseTool[]> {
     try {
-      logger.debug(`Attempting to load tools from: ${this.toolsDir}`);
+      logger.debug(`Attempting to load tools from: ${this.TOOLS_DIR}`);
 
       let stats;
       try {
-        stats = await fs.stat(this.toolsDir);
+        stats = await fs.stat(this.TOOLS_DIR);
       } catch (error) {
         logger.error(`Error accessing tools directory: ${error}`);
         return [];
       }
 
       if (!stats.isDirectory()) {
-        logger.error(`Path is not a directory: ${this.toolsDir}`);
+        logger.error(`Path is not a directory: ${this.TOOLS_DIR}`);
         return [];
       }
 
-      const files = await fs.readdir(this.toolsDir);
+      const files = await fs.readdir(this.TOOLS_DIR);
       logger.debug(`Found files in directory: ${files.join(", ")}`);
 
       const tools: BaseTool[] = [];
@@ -120,7 +74,7 @@ export class ToolLoader {
         }
 
         try {
-          const fullPath = join(this.toolsDir, file);
+          const fullPath = join(this.TOOLS_DIR, file);
           logger.debug(`Attempting to load tool from: ${fullPath}`);
 
           const importPath = `file://${fullPath}`;

@@ -4,14 +4,12 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { ToolLoader, ToolLoaderOptions } from "./toolLoader.js";
+import { ToolLoader } from "./toolLoader.js";
 import { BaseTool } from "../tools/BaseTool.js";
 
 export interface MCPServerConfig {
   name: string;
   version: string;
-  toolsDir?: string;
-  excludeTools?: string[];
 }
 
 export class MCPServer {
@@ -34,11 +32,7 @@ export class MCPServer {
       }
     );
 
-    this.toolLoader = new ToolLoader({
-      toolsDir: config.toolsDir,
-      exclude: config.excludeTools,
-    });
-
+    this.toolLoader = new ToolLoader();
     this.setupHandlers();
   }
 
@@ -72,7 +66,6 @@ export class MCPServer {
       const transport = new StdioServerTransport();
       await this.server.connect(transport);
 
-      // Write errors to stderr instead of stdout
       process.stderr.write(`Server started with ${tools.length} tools\n`);
     } catch (error) {
       process.stderr.write(`Server initialization error: ${error}\n`);

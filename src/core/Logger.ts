@@ -11,7 +11,6 @@ export class Logger {
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const logDir = "logs";
 
-    // Ensure logs directory exists
     mkdir(logDir, { recursive: true }).catch((err) => {
       process.stderr.write(`Failed to create logs directory: ${err}\n`);
     });
@@ -19,7 +18,6 @@ export class Logger {
     this.logFilePath = join(logDir, `mcp-server-${timestamp}.log`);
     this.logStream = createWriteStream(this.logFilePath, { flags: "a" });
 
-    // Handle process termination
     process.on("exit", () => this.close());
     process.on("SIGINT", () => this.close());
     process.on("SIGTERM", () => this.close());
@@ -47,7 +45,7 @@ export class Logger {
   }
 
   public log(message: string): void {
-    this.info(message); // Alias for info
+    this.info(message);
   }
 
   public error(message: string): void {
