@@ -5,14 +5,20 @@ import {
   ListToolsRequestSchema,
   ListPromptsRequestSchema,
   GetPromptRequestSchema,
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema,
+  SubscribeRequestSchema,
+  UnsubscribeRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { ToolLoader } from "./toolLoader.js";
-import { PromptLoader } from "./promptLoader.js";
 import { ToolProtocol } from "../tools/BaseTool.js";
 import { PromptProtocol } from "../prompts/BasePrompt.js";
+import { ResourceProtocol } from "../resources/BaseResource.js";
 import { readFileSync } from "fs";
 import { join, dirname } from "path";
 import { logger } from "./Logger.js";
+import { ToolLoader } from "../loaders/toolLoader.js";
+import { PromptLoader } from "../loaders/promptLoader.js";
+import { ResourceLoader } from "../loaders/resourceLoader.js";
 
 export interface MCPServerConfig {
   name?: string;
@@ -30,14 +36,19 @@ export type ServerCapabilities = {
   prompts?: {
     enabled: true;
   };
+  resources?: {
+    enabled: true;
+  };
 };
 
 export class MCPServer {
   private server: Server;
   private toolsMap: Map<string, ToolProtocol> = new Map();
   private promptsMap: Map<string, PromptProtocol> = new Map();
+  private resourcesMap: Map<string, ResourceProtocol> = new Map();
   private toolLoader: ToolLoader;
   private promptLoader: PromptLoader;
+  private resourceLoader: ResourceLoader;
   private serverName: string;
   private serverVersion: string;
   private basePath: string;
@@ -53,6 +64,7 @@ export class MCPServer {
 
     this.toolLoader = new ToolLoader(this.basePath);
     this.promptLoader = new PromptLoader(this.basePath);
+    this.resourceLoader = new ResourceLoader(this.basePath);
 
     this.server = new Server(
       {
@@ -63,6 +75,7 @@ export class MCPServer {
         capabilities: {
           tools: { enabled: true },
           prompts: { enabled: false },
+          resources: { enabled: false },
         },
       }
     );
@@ -162,6 +175,66 @@ export class MCPServer {
         messages: await prompt.getMessages(request.params.arguments),
       };
     });
+
+    this.server.setRequestHandler(ListResourcesRequestSchema, async () => {
+      return {
+        resources: Array.from(this.resourcesMap.values()).map(
+          (resource) => resource.resourceDefinition
+        ),
+      };
+    });
+
+    this.server.setRequestHandler(
+      ReadResourceRequestSchema,
+      async (request) => {
+        const resource = this.resourcesMap.get(request.params.uri);
+        if (!resource) {
+          throw new Error(
+            `Unknown resource: ${
+              request.params.uri
+            }. Available resources: ${Array.from(this.resourcesMap.keys()).join(
+              ", "
+            )}`
+          );
+        }
+
+        return {
+          contents: await resource.read(),
+        };
+      }
+    );
+
+    this.server.setRequestHandler(SubscribeRequestSchema, async (request) => {
+      const resource = this.resourcesMap.get(request.params.uri);
+      if (!resource) {
+        throw new Error(`Unknown resource: ${request.params.uri}`);
+      }
+
+      if (!resource.subscribe) {
+        throw new Error(
+          `Resource ${request.params.uri} does not support subscriptions`
+        );
+      }
+
+      await resource.subscribe();
+      return {};
+    });
+
+    this.server.setRequestHandler(UnsubscribeRequestSchema, async (request) => {
+      const resource = this.resourcesMap.get(request.params.uri);
+      if (!resource) {
+        throw new Error(`Unknown resource: ${request.params.uri}`);
+      }
+
+      if (!resource.unsubscribe) {
+        throw new Error(
+          `Resource ${request.params.uri} does not support subscriptions`
+        );
+      }
+
+      await resource.unsubscribe();
+      return {};
+    });
   }
 
   private async detectCapabilities(): Promise<ServerCapabilities> {
@@ -170,15 +243,16 @@ export class MCPServer {
     if (await this.toolLoader.hasTools()) {
       capabilities.tools = { enabled: true };
       logger.debug("Tools capability enabled");
-    } else {
-      logger.debug("No tools found, tools capability disabled");
     }
 
     if (await this.promptLoader.hasPrompts()) {
       capabilities.prompts = { enabled: true };
       logger.debug("Prompts capability enabled");
-    } else {
-      logger.debug("No prompts found, prompts capability disabled");
+    }
+
+    if (await this.resourceLoader.hasResources()) {
+      capabilities.resources = { enabled: true };
+      logger.debug("Resources capability enabled");
     }
 
     return capabilities;
@@ -196,30 +270,37 @@ export class MCPServer {
         prompts.map((prompt: PromptProtocol) => [prompt.name, prompt])
       );
 
-      this.detectCapabilities();
+      const resources = await this.resourceLoader.loadResources();
+      this.resourcesMap = new Map(
+        resources.map((resource: ResourceProtocol) => [resource.uri, resource])
+      );
+
+      await this.detectCapabilities();
 
       const transport = new StdioServerTransport();
       await this.server.connect(transport);
 
-      if (tools.length > 0 || prompts.length > 0) {
+      logger.info(`Started ${this.serverName}@${this.serverVersion}`);
+
+      if (tools.length > 0) {
         logger.info(
-          `Started ${this.serverName}@${this.serverVersion} with ${tools.length} tools and ${prompts.length} prompts`
+          `Tools (${tools.length}): ${Array.from(this.toolsMap.keys()).join(
+            ", "
+          )}`
         );
-        if (tools.length > 0) {
-          logger.info(
-            `Available tools: ${Array.from(this.toolsMap.keys()).join(", ")}`
-          );
-        }
-        if (prompts.length > 0) {
-          logger.info(
-            `Available prompts: ${Array.from(this.promptsMap.keys()).join(
-              ", "
-            )}`
-          );
-        }
-      } else {
+      }
+      if (prompts.length > 0) {
         logger.info(
-          `Started ${this.serverName}@${this.serverVersion} with no tools or prompts`
+          `Prompts (${prompts.length}): ${Array.from(
+            this.promptsMap.keys()
+          ).join(", ")}`
+        );
+      }
+      if (resources.length > 0) {
+        logger.info(
+          `Resources (${resources.length}): ${Array.from(
+            this.resourcesMap.keys()
+          ).join(", ")}`
         );
       }
     } catch (error) {

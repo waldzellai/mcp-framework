@@ -1,7 +1,7 @@
 import { PromptProtocol } from "../prompts/BasePrompt.js";
 import { join, dirname } from "path";
 import { promises as fs } from "fs";
-import { logger } from "./Logger.js";
+import { logger } from "../core/Logger.js";
 
 export class PromptLoader {
   private readonly PROMPTS_DIR: string;
