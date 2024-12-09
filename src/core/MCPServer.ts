@@ -5,7 +5,7 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { ToolLoader } from "./toolLoader.js";
-import { BaseTool } from "../tools/BaseTool.js";
+import { ToolProtocol } from "../tools/BaseTool.js";
 import { readFileSync } from "fs";
 import { join, dirname } from "path";
 import { logger } from "./Logger.js";
@@ -17,7 +17,7 @@ export interface MCPServerConfig {
 
 export class MCPServer {
   private server: Server;
-  private toolsMap: Map<string, BaseTool> = new Map();
+  private toolsMap: Map<string, ToolProtocol> = new Map();
   private toolLoader: ToolLoader;
   private serverName: string;
   private serverVersion: string;
@@ -106,14 +106,22 @@ export class MCPServer {
           ).join(", ")}`
         );
       }
-      return tool.toolCall(request);
+
+      const toolRequest = {
+        params: request.params,
+        method: "tools/call" as const,
+      };
+
+      return tool.toolCall(toolRequest);
     });
   }
 
   async start() {
     try {
       const tools = await this.toolLoader.loadTools();
-      this.toolsMap = new Map(tools.map((tool: BaseTool) => [tool.name, tool]));
+      this.toolsMap = new Map(
+        tools.map((tool: ToolProtocol) => [tool.name, tool])
+      );
 
       const transport = new StdioServerTransport();
       await this.server.connect(transport);
