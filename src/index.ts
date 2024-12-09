@@ -5,4 +5,11 @@ export {
   type ToolInputSchema,
   type ToolInput,
 } from "./tools/BaseTool.js";
+export {
+  MCPPrompt,
+  type PromptProtocol,
+  type PromptArgumentSchema,
+  type PromptArguments,
+} from "./prompts/BasePrompt.js";
 export { ToolLoader } from "./core/toolLoader.js";
+export { PromptLoader } from "./core/promptLoader.js";
