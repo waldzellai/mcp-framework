@@ -1,7 +1,7 @@
 import { ToolProtocol } from "../tools/BaseTool.js";
 import { join, dirname } from "path";
 import { promises as fs } from "fs";
-import { logger } from "./Logger.js";
+import { logger } from "../core/Logger.js";
 
 export class ToolLoader {
   private readonly TOOLS_DIR: string;

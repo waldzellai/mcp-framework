@@ -10,15 +10,15 @@ import {
   SubscribeRequestSchema,
   UnsubscribeRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { ToolLoader } from "./toolLoader.js";
-import { PromptLoader } from "./promptLoader.js";
-import { ResourceLoader } from "./resourceLoader.js";
 import { ToolProtocol } from "../tools/BaseTool.js";
 import { PromptProtocol } from "../prompts/BasePrompt.js";
 import { ResourceProtocol } from "../resources/BaseResource.js";
 import { readFileSync } from "fs";
 import { join, dirname } from "path";
 import { logger } from "./Logger.js";
+import { ToolLoader } from "../loaders/toolLoader.js";
+import { PromptLoader } from "../loaders/promptLoader.js";
+import { ResourceLoader } from "../loaders/resourceLoader.js";
 
 export interface MCPServerConfig {
   name?: string;

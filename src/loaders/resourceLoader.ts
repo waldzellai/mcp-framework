@@ -1,7 +1,7 @@
 import { ResourceProtocol } from "../resources/BaseResource.js";
 import { join, dirname } from "path";
 import { promises as fs } from "fs";
-import { logger } from "./Logger.js";
+import { logger } from "../core/Logger.js";
 
 export class ResourceLoader {
   private readonly RESOURCES_DIR: string;

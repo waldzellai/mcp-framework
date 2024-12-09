@@ -18,6 +18,6 @@ export {
   type ResourceDefinition,
   type ResourceTemplateDefinition,
 } from "./resources/BaseResource.js";
-export { ToolLoader } from "./core/toolLoader.js";
-export { PromptLoader } from "./core/promptLoader.js";
-export { ResourceLoader } from "./core/resourceLoader.js";
+export { ToolLoader } from "./loaders/toolLoader.js";
+export { PromptLoader } from "./loaders/promptLoader.js";
+export { ResourceLoader } from "./loaders/resourceLoader.js";
