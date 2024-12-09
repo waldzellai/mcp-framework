@@ -11,5 +11,13 @@ export {
   type PromptArgumentSchema,
   type PromptArguments,
 } from "./prompts/BasePrompt.js";
+export {
+  MCPResource,
+  type ResourceProtocol,
+  type ResourceContent,
+  type ResourceDefinition,
+  type ResourceTemplateDefinition,
+} from "./resources/BaseResource.js";
 export { ToolLoader } from "./core/toolLoader.js";
 export { PromptLoader } from "./core/promptLoader.js";
+export { ResourceLoader } from "./core/resourceLoader.js";
