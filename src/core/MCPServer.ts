@@ -6,10 +6,12 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { ToolLoader } from "./toolLoader.js";
 import { BaseTool } from "../tools/BaseTool.js";
+import { join, dirname } from "path";
+import { logger } from "./Logger.js";
 
 export interface MCPServerConfig {
-  name: string;
-  version: string;
+  name?: string;
+  version?: string;
 }
 
 export class MCPServer {
@@ -17,23 +19,50 @@ export class MCPServer {
   private toolsMap: Map<string, BaseTool> = new Map();
   private toolLoader: ToolLoader;
 
-  constructor(config: MCPServerConfig) {
-    this.server = new Server(
-      {
-        name: config.name,
-        version: config.version,
-      },
-      {
-        capabilities: {
-          tools: {
-            enabled: true,
-          },
+  constructor(config: MCPServerConfig = {}) {
+    const serverConfig = {
+      name: config.name ?? this.getDefaultName(),
+      version: config.version ?? this.getDefaultVersion(),
+    };
+
+    this.server = new Server(serverConfig, {
+      capabilities: {
+        tools: {
+          enabled: true,
         },
-      }
-    );
+      },
+    });
 
     this.toolLoader = new ToolLoader();
     this.setupHandlers();
+  }
+
+  private getDefaultName(): string {
+    try {
+      const mainModulePath = process.argv[1];
+      const packagePath = join(dirname(mainModulePath), "..", "package.json");
+      const packageContent = require(packagePath);
+      logger.debug(`Found package.json with name: ${packageContent.name}`);
+      return packageContent.name;
+    } catch (error) {
+      logger.warn(`Could not read package.json for name: ${error}`);
+      return "unnamed-mcp-server";
+    }
+  }
+
+  private getDefaultVersion(): string {
+    try {
+      const mainModulePath = process.argv[1];
+      const packagePath = join(dirname(mainModulePath), "..", "package.json");
+      const packageContent = require(packagePath);
+      logger.debug(
+        `Found package.json with version: ${packageContent.version}`
+      );
+      return packageContent.version;
+    } catch (error) {
+      logger.warn(`Could not read package.json for version: ${error}`);
+      return "0.0.0";
+    }
   }
 
   private setupHandlers() {
