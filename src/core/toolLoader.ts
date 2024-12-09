@@ -1,4 +1,4 @@
-import { BaseTool } from "../tools/BaseTool.js";
+import { ToolProtocol } from "../tools/BaseTool.js";
 import { join, dirname } from "path";
 import { promises as fs } from "fs";
 import { logger } from "./Logger.js";
@@ -29,7 +29,7 @@ export class ToolLoader {
     return !isExcluded;
   }
 
-  private validateTool(tool: any): tool is BaseTool {
+  private validateTool(tool: any): tool is ToolProtocol {
     const isValid = Boolean(
       tool &&
         typeof tool.name === "string" &&
@@ -46,7 +46,7 @@ export class ToolLoader {
     return isValid;
   }
 
-  async loadTools(): Promise<BaseTool[]> {
+  async loadTools(): Promise<ToolProtocol[]> {
     try {
       logger.debug(`Attempting to load tools from: ${this.TOOLS_DIR}`);
 
@@ -66,7 +66,7 @@ export class ToolLoader {
       const files = await fs.readdir(this.TOOLS_DIR);
       logger.debug(`Found files in directory: ${files.join(", ")}`);
 
-      const tools: BaseTool[] = [];
+      const tools: ToolProtocol[] = [];
 
       for (const file of files) {
         if (!this.isToolFile(file)) {
