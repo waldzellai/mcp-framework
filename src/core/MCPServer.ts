@@ -3,9 +3,13 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  ListPromptsRequestSchema,
+  GetPromptRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { ToolLoader } from "./toolLoader.js";
+import { PromptLoader } from "./promptLoader.js";
 import { ToolProtocol } from "../tools/BaseTool.js";
+import { PromptProtocol } from "../prompts/BasePrompt.js";
 import { readFileSync } from "fs";
 import { join, dirname } from "path";
 import { logger } from "./Logger.js";
@@ -31,7 +35,9 @@ export type ServerCapabilities = {
 export class MCPServer {
   private server: Server;
   private toolsMap: Map<string, ToolProtocol> = new Map();
+  private promptsMap: Map<string, PromptProtocol> = new Map();
   private toolLoader: ToolLoader;
+  private promptLoader: PromptLoader;
   private serverName: string;
   private serverVersion: string;
   private basePath: string;
@@ -46,6 +52,7 @@ export class MCPServer {
     );
 
     this.toolLoader = new ToolLoader(this.basePath);
+    this.promptLoader = new PromptLoader(this.basePath);
 
     this.server = new Server(
       {
@@ -55,6 +62,7 @@ export class MCPServer {
       {
         capabilities: {
           tools: { enabled: true },
+          prompts: { enabled: false },
         },
       }
     );
@@ -129,18 +137,48 @@ export class MCPServer {
 
       return tool.toolCall(toolRequest);
     });
+
+    this.server.setRequestHandler(ListPromptsRequestSchema, async () => {
+      return {
+        prompts: Array.from(this.promptsMap.values()).map(
+          (prompt) => prompt.promptDefinition
+        ),
+      };
+    });
+
+    this.server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+      const prompt = this.promptsMap.get(request.params.name);
+      if (!prompt) {
+        throw new Error(
+          `Unknown prompt: ${
+            request.params.name
+          }. Available prompts: ${Array.from(this.promptsMap.keys()).join(
+            ", "
+          )}`
+        );
+      }
+
+      return {
+        messages: await prompt.getMessages(request.params.arguments),
+      };
+    });
   }
 
   private async detectCapabilities(): Promise<ServerCapabilities> {
     const capabilities: ServerCapabilities = {};
-
-    //IK this is unecessary but it'll guide future schema and prompt capability autodiscovery
 
     if (await this.toolLoader.hasTools()) {
       capabilities.tools = { enabled: true };
       logger.debug("Tools capability enabled");
     } else {
       logger.debug("No tools found, tools capability disabled");
+    }
+
+    if (await this.promptLoader.hasPrompts()) {
+      capabilities.prompts = { enabled: true };
+      logger.debug("Prompts capability enabled");
+    } else {
+      logger.debug("No prompts found, prompts capability disabled");
     }
 
     return capabilities;
@@ -153,19 +191,35 @@ export class MCPServer {
         tools.map((tool: ToolProtocol) => [tool.name, tool])
       );
 
+      const prompts = await this.promptLoader.loadPrompts();
+      this.promptsMap = new Map(
+        prompts.map((prompt: PromptProtocol) => [prompt.name, prompt])
+      );
+
+      this.detectCapabilities();
+
       const transport = new StdioServerTransport();
       await this.server.connect(transport);
 
-      if (tools.length > 0) {
+      if (tools.length > 0 || prompts.length > 0) {
         logger.info(
-          `Started ${this.serverName}@${this.serverVersion} with ${tools.length} tools`
+          `Started ${this.serverName}@${this.serverVersion} with ${tools.length} tools and ${prompts.length} prompts`
         );
-        logger.info(
-          `Available tools: ${Array.from(this.toolsMap.keys()).join(", ")}`
-        );
+        if (tools.length > 0) {
+          logger.info(
+            `Available tools: ${Array.from(this.toolsMap.keys()).join(", ")}`
+          );
+        }
+        if (prompts.length > 0) {
+          logger.info(
+            `Available prompts: ${Array.from(this.promptsMap.keys()).join(
+              ", "
+            )}`
+          );
+        }
       } else {
         logger.info(
-          `Started ${this.serverName}@${this.serverVersion} with no tools`
+          `Started ${this.serverName}@${this.serverVersion} with no tools or prompts`
         );
       }
     } catch (error) {
