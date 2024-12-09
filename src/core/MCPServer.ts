@@ -13,7 +13,20 @@ import { logger } from "./Logger.js";
 export interface MCPServerConfig {
   name?: string;
   version?: string;
+  basePath?: string;
 }
+
+export type ServerCapabilities = {
+  tools?: {
+    enabled: true;
+  };
+  schemas?: {
+    enabled: true;
+  };
+  prompts?: {
+    enabled: true;
+  };
+};
 
 export class MCPServer {
   private server: Server;
@@ -21,14 +34,18 @@ export class MCPServer {
   private toolLoader: ToolLoader;
   private serverName: string;
   private serverVersion: string;
+  private basePath: string;
 
   constructor(config: MCPServerConfig = {}) {
+    this.basePath = this.resolveBasePath(config.basePath);
     this.serverName = config.name ?? this.getDefaultName();
     this.serverVersion = config.version ?? this.getDefaultVersion();
 
     logger.info(
       `Initializing MCP Server: ${this.serverName}@${this.serverVersion}`
     );
+
+    this.toolLoader = new ToolLoader(this.basePath);
 
     this.server = new Server(
       {
@@ -37,21 +54,27 @@ export class MCPServer {
       },
       {
         capabilities: {
-          tools: {
-            enabled: true,
-          },
+          tools: { enabled: true },
         },
       }
     );
 
-    this.toolLoader = new ToolLoader();
     this.setupHandlers();
+  }
+
+  private resolveBasePath(configPath?: string): string {
+    if (configPath) {
+      return configPath;
+    }
+    if (process.argv[1]) {
+      return process.argv[1];
+    }
+    return process.cwd();
   }
 
   private readPackageJson(): any {
     try {
-      const mainModulePath = process.argv[1];
-      const packagePath = join(dirname(mainModulePath), "..", "package.json");
+      const packagePath = join(dirname(this.basePath), "package.json");
       const packageContent = readFileSync(packagePath, "utf-8");
       const packageJson = JSON.parse(packageContent);
       logger.debug(`Successfully read package.json from: ${packagePath}`);
@@ -63,27 +86,19 @@ export class MCPServer {
   }
 
   private getDefaultName(): string {
-    try {
-      const packageJson = this.readPackageJson();
-      if (packageJson?.name) {
-        logger.info(`Using name from package.json: ${packageJson.name}`);
-        return packageJson.name;
-      }
-    } catch (error) {
-      logger.warn(`Error getting name from package.json: ${error}`);
+    const packageJson = this.readPackageJson();
+    if (packageJson?.name) {
+      logger.info(`Using name from package.json: ${packageJson.name}`);
+      return packageJson.name;
     }
     return "unnamed-mcp-server";
   }
 
   private getDefaultVersion(): string {
-    try {
-      const packageJson = this.readPackageJson();
-      if (packageJson?.version) {
-        logger.info(`Using version from package.json: ${packageJson.version}`);
-        return packageJson.version;
-      }
-    } catch (error) {
-      logger.warn(`Error getting version from package.json: ${error}`);
+    const packageJson = this.readPackageJson();
+    if (packageJson?.version) {
+      logger.info(`Using version from package.json: ${packageJson.version}`);
+      return packageJson.version;
     }
     return "0.0.0";
   }
@@ -116,6 +131,21 @@ export class MCPServer {
     });
   }
 
+  private async detectCapabilities(): Promise<ServerCapabilities> {
+    const capabilities: ServerCapabilities = {};
+
+    //IK this is unecessary but it'll guide future schema and prompt capability autodiscovery
+
+    if (await this.toolLoader.hasTools()) {
+      capabilities.tools = { enabled: true };
+      logger.debug("Tools capability enabled");
+    } else {
+      logger.debug("No tools found, tools capability disabled");
+    }
+
+    return capabilities;
+  }
+
   async start() {
     try {
       const tools = await this.toolLoader.loadTools();
@@ -126,12 +156,18 @@ export class MCPServer {
       const transport = new StdioServerTransport();
       await this.server.connect(transport);
 
-      logger.info(
-        `Started ${this.serverName}@${this.serverVersion} with ${tools.length} tools`
-      );
-      logger.info(
-        `Available tools: ${Array.from(this.toolsMap.keys()).join(", ")}`
-      );
+      if (tools.length > 0) {
+        logger.info(
+          `Started ${this.serverName}@${this.serverVersion} with ${tools.length} tools`
+        );
+        logger.info(
+          `Available tools: ${Array.from(this.toolsMap.keys()).join(", ")}`
+        );
+      } else {
+        logger.info(
+          `Started ${this.serverName}@${this.serverVersion} with no tools`
+        );
+      }
     } catch (error) {
       logger.error(`Server initialization error: ${error}`);
       throw error;
