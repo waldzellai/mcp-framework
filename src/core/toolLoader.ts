@@ -2,6 +2,7 @@ import { BaseTool } from "../tools/BaseTool.js";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { promises as fs } from "fs";
+import { cwd } from "process";
 
 export interface ToolLoaderOptions {
   toolsDir?: string;
@@ -18,9 +19,8 @@ export class ToolLoader {
   }
 
   private findDefaultToolsDir(): string {
-    const currentFilePath = fileURLToPath(import.meta.url);
-    const currentDir = dirname(currentFilePath);
-    return join(currentDir, "..", "..", "dist", "tools");
+    // Use current working directory + dist/tools as default
+    return join(cwd(), "dist", "tools");
   }
 
   private isToolFile(file: string): boolean {
@@ -45,20 +45,32 @@ export class ToolLoader {
 
   async loadTools(): Promise<BaseTool[]> {
     try {
+      console.log(`Loading tools from directory: ${this.toolsDir}`);
       const files = await fs.readdir(this.toolsDir);
+      console.log(`Found files: ${files.join(", ")}`);
 
       const toolPromises = files
         .filter((file) => this.isToolFile(file))
         .map(async (file) => {
           try {
-            const modulePath = `file://${join(this.toolsDir, file)}`;
-            const { default: ToolClass } = await import(modulePath);
+            const fullPath = join(this.toolsDir, file);
+            console.log(`Loading tool from: ${fullPath}`);
+            const { default: ToolClass } = await import(`file://${fullPath}`);
 
-            if (!ToolClass) return null;
+            if (!ToolClass) {
+              console.log(`No default export found in ${file}`);
+              return null;
+            }
 
             const tool = new ToolClass();
-            return this.validateTool(tool) ? tool : null;
-          } catch {
+            if (this.validateTool(tool)) {
+              console.log(`Successfully loaded tool: ${tool.name}`);
+              return tool;
+            }
+            console.log(`Invalid tool found in ${file}`);
+            return null;
+          } catch (error) {
+            console.error(`Error loading tool ${file}:`, error);
             return null;
           }
         });
@@ -66,9 +78,12 @@ export class ToolLoader {
       const tools = (await Promise.all(toolPromises)).filter(
         Boolean
       ) as BaseTool[];
+      console.log(
+        `Loaded ${tools.length} tools: ${tools.map((t) => t.name).join(", ")}`
+      );
       return tools;
     } catch (error) {
-      console.error(`Failed to load tools from ${this.toolsDir}`);
+      console.error(`Failed to load tools from ${this.toolsDir}:`, error);
       return [];
     }
   }
