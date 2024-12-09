@@ -27,7 +27,9 @@ export class MCPServer {
       },
       {
         capabilities: {
-          tools: {},
+          tools: {
+            enabled: true,
+          },
         },
       }
     );
@@ -41,11 +43,13 @@ export class MCPServer {
   }
 
   private setupHandlers() {
-    this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-      tools: Array.from(this.toolsMap.values()).map(
-        (tool) => tool.toolDefinition
-      ),
-    }));
+    this.server.setRequestHandler(ListToolsRequestSchema, async () => {
+      return {
+        tools: Array.from(this.toolsMap.values()).map(
+          (tool) => tool.toolDefinition
+        ),
+      };
+    });
 
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const tool = this.toolsMap.get(request.params.name);
@@ -67,8 +71,11 @@ export class MCPServer {
 
       const transport = new StdioServerTransport();
       await this.server.connect(transport);
+
+      // Write errors to stderr instead of stdout
+      process.stderr.write(`Server started with ${tools.length} tools\n`);
     } catch (error) {
-      console.error("Server initialization error:", error);
+      process.stderr.write(`Server initialization error: ${error}\n`);
       throw error;
     }
   }
