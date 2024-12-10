@@ -3,6 +3,12 @@ import { spawnSync } from "child_process";
 import { readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 
+export function buildFramework() {
+  runTsc();
+  addShebang();
+  console.log("MCP Build complete");
+}
+
 function runTsc() {
   const tscPath = join(process.cwd(), "node_modules", ".bin", "tsc");
   const tsc = spawnSync(tscPath, [], {
@@ -30,9 +36,3 @@ function addShebang() {
     process.exit(1);
   }
 }
-
-runTsc();
-
-addShebang();
-
-console.log("MCP Build complete");
