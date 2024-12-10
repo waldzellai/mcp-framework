@@ -83,12 +83,58 @@ mcp add resource market-data
    mcp add tool report-generator
    ```
 
-3. Build and run:
+3. Build:
+
    ```bash
    npm run build
-   # or
-   npm run watch   # for development
+
    ```
+
+4. Add to MCP Client (Read below for Claude Desktop example)
+
+## Using with Claude Desktop
+
+### Local Development
+
+Add this configuration to your Claude Desktop config file:
+
+**MacOS**: \`~/Library/Application Support/Claude/claude_desktop_config.json\`
+**Windows**: \`%APPDATA%/Claude/claude_desktop_config.json\`
+
+\`\`\`json
+{
+"mcpServers": {
+"${projectName}": {
+      "command": "node",
+      "args":["/absolute/path/to/${projectName}/dist/index.js"]
+}
+}
+}
+\`\`\`
+
+### After Publishing
+
+Add this configuration to your Claude Desktop config file:
+
+**MacOS**: \`~/Library/Application Support/Claude/claude_desktop_config.json\`
+**Windows**: \`%APPDATA%/Claude/claude_desktop_config.json\`
+
+\`\`\`json
+{
+"mcpServers": {
+"${projectName}": {
+      "command": "npx",
+      "args": ["${projectName}"]
+}
+}
+}
+\`\`\`
+
+## Building and Testing
+
+1. Make changes to your tools
+2. Run \`npm run build\` to compile
+3. The server will automatically load your tools on startup
 
 ## Components Overview
 

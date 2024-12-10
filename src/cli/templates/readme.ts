@@ -113,7 +113,8 @@ Add this configuration to your Claude Desktop config file:
 {
   "mcpServers": {
     "${projectName}": {
-      "command": "/absolute/path/to/${projectName}/dist/index.js"
+      "command": "node",
+      "args":["/absolute/path/to/${projectName}/dist/index.js"]
     }
   }
 }
@@ -145,7 +146,7 @@ Add this configuration to your Claude Desktop config file:
 
 ## Learn More
 
-- [MCP Framework Documentation](https://github.com/your-org/mcp-framework)
-- [Model Context Protocol Specification](https://github.com/anthropics/model-context-protocol)
+- [MCP Framework Github](https://github.com/QuantGeekDev/mcp-framework)
+- [MCP Framework Docs](https://mcp-framework.com)
 `;
 }
