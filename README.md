@@ -7,31 +7,94 @@ Get started fast with mcp-framework ⚡⚡⚡
 ## Features
 
 - 🛠️ Automatic directory-based discovery and loading for tools, prompts, and resources
-- 🏗️ Powerful abstractions
+- 🏗️ Powerful abstractions with full type safety
 - 🚀 Simple server setup and configuration
+- 📦 CLI for rapid development and project scaffolding
 
-## Installation
+## Quick Start
+
+### Using the CLI (Recommended)
+
+```bash
+# Install the framework globally
+npm install -g mcp-framework
+
+# Create a new MCP server project
+mcp create my-mcp-server
+
+# Navigate to your project
+cd my-mcp-server
+
+# Your server is ready to use!
+```
+
+### Manual Installation
 
 ```bash
 npm install mcp-framework
 ```
 
-## Quick Start
+## CLI Usage
 
-### 1. Create your MCP server:
+The framework provides a powerful CLI for managing your MCP server projects:
 
-```typescript
-import { MCPServer } from "mcp-framework";
+### Project Creation
 
-const server = new MCPServer();
-
-server.start().catch((error) => {
-  console.error("Server failed to start:", error);
-  process.exit(1);
-});
+```bash
+# Create a new project
+mcp create <your project name here>
 ```
 
-### 2. Create a Tool:
+### Adding a Tool
+
+```bash
+# Add a new tool
+mcp add tool price-fetcher
+```
+
+### Adding a Prompt
+
+```bash
+# Add a new prompt
+mcp add prompt price-analysis
+```
+
+### Adding a Resource
+
+```bash
+# Add a new prompt
+mcp add resource market-data
+```
+
+## Development Workflow
+
+1. Create your project:
+
+```bash
+  mcp create my-mcp-server
+  cd my-mcp-server
+```
+
+2. Add tools as needed:
+
+   ```bash
+   mcp add tool data-fetcher
+   mcp add tool data-processor
+   mcp add tool report-generator
+   ```
+
+3. Build and run:
+   ```bash
+   npm run build
+   # or
+   npm run watch   # for development
+   ```
+
+## Components Overview
+
+### 1. Tools (Main Component)
+
+Tools are the primary way to extend an LLM's capabilities. Each tool should perform a specific function:
 
 ```typescript
 import { MCPTool } from "mcp-framework";
@@ -60,7 +123,9 @@ class ExampleTool extends MCPTool<ExampleInput> {
 export default ExampleTool;
 ```
 
-### 3. Create a Prompt:
+### 2. Prompts (Optional)
+
+Prompts help structure conversations with Claude:
 
 ```typescript
 import { MCPPrompt } from "mcp-framework";
@@ -104,7 +169,9 @@ class GreetingPrompt extends MCPPrompt<GreetingInput> {
 export default GreetingPrompt;
 ```
 
-### 4. Create a Resource:
+### 3. Resources (Optional)
+
+Resources provide data access capabilities:
 
 ```typescript
 import { MCPResource, ResourceContent } from "mcp-framework";
@@ -139,11 +206,11 @@ export default ConfigResource;
 ```
 your-project/
 ├── src/
-│   ├── tools/          # Tool implementations
+│   ├── tools/          # Tool implementations (Required)
 │   │   └── ExampleTool.ts
-│   ├── prompts/        # Prompt implementations
+│   ├── prompts/        # Prompt implementations (Optional)
 │   │   └── GreetingPrompt.ts
-│   ├── resources/      # Resource implementations
+│   ├── resources/      # Resource implementations (Optional)
 │   │   └── ConfigResource.ts
 │   └── index.ts
 ├── package.json
@@ -155,8 +222,8 @@ your-project/
 The framework automatically discovers and loads:
 
 - Tools from the `src/tools` directory
-- Prompts from the `src/prompts` directory
-- Resources from the `src/resources` directory
+- Prompts from the `src/prompts` directory (if present)
+- Resources from the `src/resources` directory (if present)
 
 Each feature should be in its own file and export a default class that extends the appropriate base class:
 
