@@ -123,7 +123,7 @@ Add this configuration to your Claude Desktop config file:
 **MacOS**: \`~/Library/Application Support/Claude/claude_desktop_config.json\`
 **Windows**: \`%APPDATA%/Claude/claude_desktop_config.json\`
 
-\`\`\`json
+```json
 {
 "mcpServers": {
 "${projectName}": {
@@ -132,7 +132,7 @@ Add this configuration to your Claude Desktop config file:
 }
 }
 }
-\`\`\`
+```
 
 ## Building and Testing
 
