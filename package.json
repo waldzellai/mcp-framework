@@ -1,6 +1,6 @@
 {
   "name": "mcp-framework",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "Framework for building Model Context Protocol (MCP) servers in Typescript",
   "type": "module",
   "author": "Alex Andru <alex@andru.codes>",
@@ -16,7 +16,8 @@
     "dist"
   ],
   "bin": {
-    "mcp-build": "./dist/cli/build.js"
+    "mcp": "./dist/cli/index.js",
+    "mcp-build": "./dist/cli/framework/build.js"
   },
   "scripts": {
     "build": "tsc",
@@ -36,6 +37,9 @@
     "@modelcontextprotocol/sdk": "^0.6.0"
   },
   "dependencies": {
+    "@types/prompts": "^2.4.9",
+    "commander": "^12.1.0",
+    "prompts": "^2.4.2",
     "zod": "^3.23.8"
   },
   "devDependencies": {
