@@ -4,7 +4,7 @@ MCP is a framework for building Model Context Protocol (MCP) servers elegantly i
 
 MCP-Framework gives you architecture out of the box, with automatic directory-based discovery for tools, resources, and prompts. Use our powerful MCP abstractions to define tools, resources, or prompts in an elegant way. Our cli makes getting started with your own MCP server a breeze
 
-[Read the full docs here](https://modelcontextprotocol.com)
+[Read the full docs here](https://mcp-framework.com)
 
 Get started fast with mcp-framework ⚡⚡⚡
 
@@ -105,7 +105,7 @@ Add this configuration to your Claude Desktop config file:
 **MacOS**: \`~/Library/Application Support/Claude/claude_desktop_config.json\`
 **Windows**: \`%APPDATA%/Claude/claude_desktop_config.json\`
 
-\`\`\`json
+```json
 {
 "mcpServers": {
 "${projectName}": {
@@ -114,7 +114,7 @@ Add this configuration to your Claude Desktop config file:
 }
 }
 }
-\`\`\`
+```
 
 ### After Publishing
 
@@ -123,7 +123,7 @@ Add this configuration to your Claude Desktop config file:
 **MacOS**: \`~/Library/Application Support/Claude/claude_desktop_config.json\`
 **Windows**: \`%APPDATA%/Claude/claude_desktop_config.json\`
 
-\`\`\`json
+```json
 {
 "mcpServers": {
 "${projectName}": {
@@ -132,7 +132,7 @@ Add this configuration to your Claude Desktop config file:
 }
 }
 }
-\`\`\`
+```
 
 ## Building and Testing
 
