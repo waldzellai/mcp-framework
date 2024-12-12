@@ -2,6 +2,7 @@
 import { spawnSync } from "child_process";
 import { readFileSync, writeFileSync } from "fs";
 import { join } from "path";
+import { platform } from "os";
 
 export function buildFramework() {
   runTsc();
@@ -10,13 +11,25 @@ export function buildFramework() {
 }
 
 function runTsc() {
-  const tscPath = join(process.cwd(), "node_modules", ".bin", "tsc");
+  const isWindows = platform() === "win32";
+  const tscPath = join(
+    process.cwd(),
+    "node_modules",
+    ".bin",
+    isWindows ? "tsc.cmd" : "tsc"
+  );
+
   const tsc = spawnSync(tscPath, [], {
     stdio: "inherit",
     shell: true,
+    env: {
+      ...process.env,
+      PATH: process.env.PATH,
+    },
   });
 
   if (tsc.status !== 0) {
+    console.error("TypeScript compilation failed");
     process.exit(tsc.status ?? 1);
   }
 }
