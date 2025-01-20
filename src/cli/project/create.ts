@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "fs/promises";
 import { join } from "path";
 import prompts from "prompts";
 import { generateReadme } from "../templates/readme.js";
+import { platform } from "os";
 
 export async function createProject(name?: string) {
   let projectName: string;
@@ -119,22 +120,17 @@ export default ExampleTool;`;
 
     console.log("Creating project files...");
     await Promise.all([
-      writeFile(
-        join(projectDir, "package.json"),
-        JSON.stringify(packageJson, null, 2)
-      ),
-      writeFile(
-        join(projectDir, "tsconfig.json"),
-        JSON.stringify(tsconfig, null, 2)
-      ),
+      writeFile(join(projectDir, "package.json"), JSON.stringify(packageJson, null, 2)),
+      writeFile(join(projectDir, "tsconfig.json"), JSON.stringify(tsconfig, null, 2)),
       writeFile(join(projectDir, "README.md"), generateReadme(projectName)),
       writeFile(join(srcDir, "index.ts"), indexTs),
       writeFile(join(toolsDir, "ExampleTool.ts"), exampleToolTs),
     ]);
 
+    process.chdir(projectDir);
+
     console.log("Initializing git repository...");
     const gitInit = spawnSync("git", ["init"], {
-      cwd: projectDir,
       stdio: "inherit",
       shell: true,
     });
@@ -145,7 +141,6 @@ export default ExampleTool;`;
 
     console.log("Installing dependencies...");
     const npmInstall = spawnSync("npm", ["install"], {
-      cwd: projectDir,
       stdio: "inherit",
       shell: true,
     });
@@ -156,9 +151,9 @@ export default ExampleTool;`;
 
     console.log("Building project...");
     const npmBuild = spawnSync("npm", ["run", "build"], {
-      cwd: projectDir,
       stdio: "inherit",
       shell: true,
+      env: process.env
     });
 
     if (npmBuild.status !== 0) {

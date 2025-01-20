@@ -14,8 +14,8 @@ program
   .version("0.1.8");
 
 program
-  .command("build-framework", { hidden: true })
-  .description("Build the MCP framework")
+  .command("build")
+  .description("Build the MCP project")
   .action(buildFramework);
 
 program
