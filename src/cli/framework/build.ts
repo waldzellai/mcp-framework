@@ -1,24 +1,26 @@
-#!/usr/bin/env node
 import { spawnSync } from "child_process";
-import { readFileSync, writeFileSync } from "fs";
+import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
 import { platform } from "os";
-import { existsSync } from "fs";
 
 export function buildFramework() {
-  const tsconfigPath = join(process.cwd(), "tsconfig.json");
+  const isCreatingProject = process.argv.includes('create');
+  if (isCreatingProject) {
+    return; 
+  }
+
+  const projectDir = process.cwd();
+  const tsconfigPath = join(projectDir, "tsconfig.json");
+
   if (!existsSync(tsconfigPath)) {
     console.error("Error: tsconfig.json not found!");
     process.exit(1);
   }
   console.log("Found tsconfig.json");
+
   const isWindows = platform() === "win32";
-  const tscPath = join(
-    process.cwd(),
-    "node_modules",
-    ".bin",
-    isWindows ? "tsc.cmd" : "tsc"
-  );
+  const nodeModulesPath = join(projectDir, "node_modules");
+  const tscPath = join(nodeModulesPath, ".bin", isWindows ? "tsc.cmd" : "tsc");
 
   if (!existsSync(tscPath)) {
     console.error("Error: TypeScript compiler not found at:", tscPath);
@@ -30,8 +32,8 @@ export function buildFramework() {
     shell: true,
     env: {
       ...process.env,
-      PATH: process.env.PATH,
-    },
+      PATH: process.env.PATH
+    }
   });
 
   if (tsc.error) {
@@ -47,14 +49,14 @@ export function buildFramework() {
   }
 
   try {
-    const distPath = join(process.cwd(), "dist");
+    const distPath = join(projectDir, "dist");
 
     if (!existsSync(distPath)) {
       console.error("Error: dist directory not found after compilation!");
       process.exit(1);
     }
 
-    const indexPath = join(process.cwd(), "dist", "index.js");
+    const indexPath = join(distPath, "index.js");
     console.log("Adding shebang to:", indexPath);
 
     if (!existsSync(indexPath)) {
