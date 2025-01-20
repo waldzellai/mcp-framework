@@ -27,20 +27,19 @@ export function buildFramework() {
     process.exit(1);
   }
 
-  const tsc = spawnSync(tscPath, [], {
-    stdio: "inherit",
-    shell: true,
-    env: {
-      ...process.env,
-      PATH: process.env.PATH
-    }
-  });
+  const tsc = spawnSync(isWindows ? tscPath : "node", 
+    isWindows ? [] : [tscPath], 
+    {
+      stdio: "inherit",
+      env: {
+        ...process.env,
+        ELECTRON_RUN_AS_NODE: "1" 
+      }
+    });
 
   if (tsc.error) {
     console.error("TypeScript compilation error:", tsc.error);
-  }
-  if (tsc.stderr) {
-    console.error("TypeScript stderr:", tsc.stderr.toString());
+    process.exit(1);
   }
 
   if (tsc.status !== 0) {
