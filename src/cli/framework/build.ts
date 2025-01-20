@@ -4,20 +4,26 @@ import { join } from "path";
 
 export async function buildFramework() {
   const projectDir = process.cwd();
-
+  
   try {
-    await execa("npx", ["tsc"], {
+    console.log(`Building project in: ${projectDir}`);
+    
+    await execa("tsc", [], {
       stdio: "inherit",
       reject: true,
+      cwd: projectDir
     });
 
-    const indexPath = join(projectDir, "dist", "index.js");
+    const distPath = join(projectDir, "dist");
+    const projectIndexPath = join(distPath, "index.js");
     const shebang = "#!/usr/bin/env node\n";
     
-    const content = await readFile(indexPath, "utf8");
+    const content = await readFile(projectIndexPath, "utf8");
     if (!content.startsWith(shebang)) {
-      await writeFile(indexPath, shebang + content);
+      await writeFile(projectIndexPath, shebang + content);
     }
+
+    console.log("Build complete!");
   } catch (error) {
     console.error("Build failed:", error instanceof Error ? error.message : error);
     process.exit(1);
