@@ -3,6 +3,10 @@ import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
 import { platform } from "os";
 
+interface NodeError extends Error {
+  code?: string;
+}
+
 export function buildFramework() {
   const isCreatingProject = process.argv.includes('create');
   if (isCreatingProject) {
@@ -20,31 +24,40 @@ export function buildFramework() {
 
   const isWindows = platform() === "win32";
   const nodeModulesPath = join(projectDir, "node_modules");
-  const tscPath = join(nodeModulesPath, ".bin", isWindows ? "tsc.cmd" : "tsc");
+  const tscBin = join(nodeModulesPath, ".bin", "tsc");
+  const tscPath = isWindows ? `${tscBin}.cmd` : tscBin;
 
-  if (!existsSync(tscPath)) {
-    console.error("Error: TypeScript compiler not found at:", tscPath);
-    process.exit(1);
-  }
-
-  const tsc = spawnSync(isWindows ? tscPath : "node", 
-    isWindows ? [] : [tscPath], 
-    {
+  let spawnResult;
+  
+  if (isWindows) {
+    spawnResult = spawnSync(tscPath, [], {
+      stdio: "inherit",
+      env: process.env,
+      shell: true
+    });
+  } else {
+    spawnResult = spawnSync(tscPath, [], {
       stdio: "inherit",
       env: {
         ...process.env,
-        ELECTRON_RUN_AS_NODE: "1" 
+        ELECTRON_RUN_AS_NODE: "1"
       }
     });
+  }
 
-  if (tsc.error) {
-    console.error("TypeScript compilation error:", tsc.error);
+  if (spawnResult.error) {
+    const nodeError = spawnResult.error as NodeError;
+    if (nodeError.code === 'ENOENT') {
+      console.error("TypeScript compiler not found. Please ensure TypeScript is installed.");
+      process.exit(1);
+    }
+    console.error("TypeScript compilation error:", nodeError);
     process.exit(1);
   }
 
-  if (tsc.status !== 0) {
+  if (spawnResult.status !== 0) {
     console.error("TypeScript compilation failed");
-    process.exit(tsc.status ?? 1);
+    process.exit(spawnResult.status ?? 1);
   }
 
   try {
@@ -55,19 +68,25 @@ export function buildFramework() {
       process.exit(1);
     }
 
+    const cliIndexPath = join(distPath, "cli", "index.js");
     const indexPath = join(distPath, "index.js");
-    console.log("Adding shebang to:", indexPath);
+    
+    const filesToAddShebang = [cliIndexPath, indexPath];
 
-    if (!existsSync(indexPath)) {
-      console.error("Error: index.js not found in dist directory!");
-      process.exit(1);
+    for (const filePath of filesToAddShebang) {
+      if (existsSync(filePath)) {
+        console.log("Adding shebang to:", filePath);
+        const content = readFileSync(filePath, "utf8");
+        const shebang = "#!/usr/bin/env node\n";
+
+        if (!content.startsWith(shebang)) {
+          writeFileSync(filePath, shebang + content);
+        }
+      }
     }
 
-    const content = readFileSync(indexPath, "utf8");
-    const shebang = "#!/usr/bin/env node\n";
-
-    if (!content.startsWith(shebang)) {
-      writeFileSync(indexPath, shebang + content);
+    if (!existsSync(indexPath)) {
+      console.error("Warning: index.js not found in dist directory");
     }
   } catch (error) {
     console.error("Error in shebang process:", error);
