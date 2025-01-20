@@ -1,6 +1,6 @@
 {
   "name": "mcp-framework",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "description": "Framework for building Model Context Protocol (MCP) servers in Typescript",
   "type": "module",
   "author": "Alex Andru <alex@andru.codes>",
@@ -39,6 +39,7 @@
   "dependencies": {
     "@types/prompts": "^2.4.9",
     "commander": "^12.1.0",
+    "execa": "^9.5.2",
     "prompts": "^2.4.2",
     "typescript": "^5.3.3",
     "zod": "^3.23.8"
