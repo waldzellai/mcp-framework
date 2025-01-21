@@ -3,7 +3,6 @@ import { mkdir, writeFile } from "fs/promises";
 import { join } from "path";
 import prompts from "prompts";
 import { generateReadme } from "../templates/readme.js";
-import { platform } from "os";
 
 export async function createProject(name?: string) {
   let projectName: string;

@@ -1,35 +1,53 @@
 import { execa } from "execa";
 import { readFile, writeFile } from "fs/promises";
 import { join } from "path";
+import { findUp } from "find-up";
 
 export async function buildFramework() {
-  const projectDir = process.cwd();
-  
-  try {
-    console.log(`Building project in: ${projectDir}`);
-    
-    await execa("tsc", [], {
-      stdio: "inherit",
-      reject: true,
-      cwd: projectDir
+    const projectRoot = await findUp(async directory => {
+        const pkgPath = join(directory, 'package.json');
+        const tsConfigPath = join(directory, 'tsconfig.json');
+        
+        try {
+            const [pkgContent, tsConfigContent] = await Promise.all([
+                readFile(pkgPath, 'utf8').catch(() => null),
+                readFile(tsConfigPath, 'utf8').catch(() => null)
+            ]);
+            
+            if (pkgContent && tsConfigContent) {
+                const pkg = JSON.parse(pkgContent);
+                return pkg.name === 'composer-mcp' ? directory : undefined;
+            }
+        } catch {
+            return undefined;
+        }
     });
 
-    const distPath = join(projectDir, "dist");
-    const projectIndexPath = join(distPath, "index.js");
-    const shebang = "#!/usr/bin/env node\n";
-    
-    const content = await readFile(projectIndexPath, "utf8");
-    if (!content.startsWith(shebang)) {
-      await writeFile(projectIndexPath, shebang + content);
+    if (!projectRoot) {
+        throw new Error('Could not find target project root directory');
     }
 
-    console.log("Build complete!");
-  } catch (error) {
-    console.error("Build failed:", error instanceof Error ? error.message : error);
-    process.exit(1);
-  }
+    try {
+        await execa("tsc", [], {
+            stdio: "inherit",
+            reject: true,
+            cwd: projectRoot
+        });
+
+        const distPath = join(projectRoot, "dist");
+        const projectIndexPath = join(distPath, "index.js");
+        const shebang = "#!/usr/bin/env node\n";
+        
+        const content = await readFile(projectIndexPath, "utf8");
+        if (!content.startsWith(shebang)) {
+            await writeFile(projectIndexPath, shebang + content);
+        }
+    } catch (error) {
+        console.error("Build failed:", error instanceof Error ? error.message : error);
+        process.exit(1);
+    }
 }
 
 if (import.meta.url === new URL(import.meta.url).href) {
-  buildFramework().catch(console.error);
+    buildFramework().catch(console.error);
 }
