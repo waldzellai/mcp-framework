@@ -15,8 +15,7 @@ export async function buildFramework() {
             ]);
             
             if (pkgContent && tsConfigContent) {
-                const pkg = JSON.parse(pkgContent);
-                return pkg.name === 'composer-mcp' ? directory : undefined;
+                return directory;
             }
         } catch {
             return undefined;
