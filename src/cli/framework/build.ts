@@ -11,38 +11,26 @@ export async function buildFramework() {
     const startDir = process.cwd();
     process.stderr.write(`Starting search from: ${startDir}\n`);
     
-    let projectRoot: string | null = null;
+    if (process.argv.includes('create')) {
+        process.stderr.write(`Skipping build for create command\n`);
+        return;
+    }
+    
     try {
         const pkgPath = join(startDir, 'package.json');
-        const tsConfigPath = join(startDir, 'tsconfig.json');
-        
-        process.stderr.write(`Checking for package.json at: ${pkgPath}\n`);
-        const [pkgContent, _tsConfigContent] = await Promise.all([
-            readFile(pkgPath, 'utf8'),
-            readFile(tsConfigPath, 'utf8')
-        ]);
-        
+        const pkgContent = await readFile(pkgPath, 'utf8');
         const pkg = JSON.parse(pkgContent);
-        if (pkg.dependencies?.["mcp-framework"]) {
-            projectRoot = startDir;
-            process.stderr.write(`Found MCP project at current directory: ${projectRoot}\n`);
+        
+        if (!pkg.dependencies?.["mcp-framework"]) {
+            throw new Error("This directory is not an MCP project (mcp-framework not found in dependencies)");
         }
-    } catch (error) {
-        process.stderr.write(`Error checking current directory: ${error instanceof Error ? error.message : String(error)}\n`);
-    }
-
-    if (!projectRoot) {
-        process.stderr.write("Error: Current directory is not an MCP project\n");
-        throw new Error('Current directory must be an MCP project with mcp-framework as a dependency');
-    }
-
-    try {
-        process.stderr.write(`Running tsc in ${projectRoot}\n`);
+        
+        process.stderr.write(`Running tsc in ${startDir}\n`);
         
         const tscCommand = process.platform === 'win32' ? ['npx.cmd', 'tsc'] : ['npx', 'tsc'];
             
         await execa(tscCommand[0], [tscCommand[1]], {
-            cwd: projectRoot,
+            cwd: startDir,
             stdio: "inherit",
             env: {
                 ...process.env,
@@ -51,7 +39,7 @@ export async function buildFramework() {
             }
         });
 
-        const distPath = join(projectRoot, "dist");
+        const distPath = join(startDir, "dist");
         const projectIndexPath = join(distPath, "index.js");
         const shebang = "#!/usr/bin/env node\n";
         
@@ -68,7 +56,7 @@ export async function buildFramework() {
 
         process.stderr.write("Build completed successfully!\n");
     } catch (error) {
-        process.stderr.write(`Build error: ${error instanceof Error ? error.message : String(error)}\n`);
+        process.stderr.write(`Error: ${error instanceof Error ? error.message : String(error)}\n`);
         process.exit(1);
     }
 }
@@ -80,3 +68,5 @@ if (import.meta.url.startsWith('file:')) {
         process.exit(1);
     });
 }
+
+export default buildFramework;

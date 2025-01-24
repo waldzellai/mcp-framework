@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "fs/promises";
 import { join } from "path";
 import prompts from "prompts";
 import { generateReadme } from "../templates/readme.js";
+import { execa } from "execa";
 
 export async function createProject(name?: string) {
   let projectName: string;
@@ -148,15 +149,28 @@ export default ExampleTool;`;
       throw new Error("Failed to install dependencies");
     }
 
-    console.log("Building project...");
-    const npmBuild = spawnSync("npm", ["run", "build"], {
+    console.log("Building TypeScript...");
+    const tscBuild = await execa('npx', ['tsc'], {
+      cwd: projectDir,
       stdio: "inherit",
-      shell: true,
-      env: process.env
     });
 
-    if (npmBuild.status !== 0) {
-      throw new Error("Failed to build project");
+    if (tscBuild.exitCode !== 0) {
+      throw new Error("Failed to build TypeScript");
+    }
+
+    console.log("Adding shebang...");
+    const mcpBuild = spawnSync("npm", ["run", "build"], {
+      stdio: "inherit",
+      shell: true,
+      env: {
+        ...process.env,
+        FORCE_COLOR: "1"
+      }
+    });
+
+    if (mcpBuild.status !== 0) {
+      throw new Error("Failed to add shebang");
     }
 
     console.log(`
