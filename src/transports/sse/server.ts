@@ -6,19 +6,12 @@ import getRawBody from "raw-body"
 import { APIKeyAuthProvider } from "../../auth/providers/apikey.js"
 import { DEFAULT_AUTH_ERROR } from "../../auth/types.js"
 import { AbstractTransport } from "../base.js"
-import { DEFAULT_SSE_CONFIG, SSETransportConfig, SSETransportConfigInternal } from "./types.js"
+import { DEFAULT_SSE_CONFIG, SSETransportConfig, SSETransportConfigInternal, DEFAULT_CORS_CONFIG, CORSConfig } from "./types.js"
 import { logger } from "../../core/Logger.js"
 import { getRequestHeader, setResponseHeaders } from "../../utils/headers.js"
 
 interface ExtendedIncomingMessage extends IncomingMessage {
   body?: ClientRequest
-}
-
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, x-api-key",
-  "Access-Control-Expose-Headers": "Content-Type, Authorization, x-api-key"
 }
 
 const SSE_HEADERS = {
@@ -50,6 +43,31 @@ export class SSEServerTransport extends AbstractTransport {
         endpoints: this._config.auth.endpoints
       } : undefined
     })}`)
+  }
+
+  private getCorsHeaders(includeMaxAge: boolean = false): Record<string, string> {
+    // Ensure all CORS properties are present by merging with defaults
+    const corsConfig = {
+      allowOrigin: DEFAULT_CORS_CONFIG.allowOrigin,
+      allowMethods: DEFAULT_CORS_CONFIG.allowMethods,
+      allowHeaders: DEFAULT_CORS_CONFIG.allowHeaders,
+      exposeHeaders: DEFAULT_CORS_CONFIG.exposeHeaders,
+      maxAge: DEFAULT_CORS_CONFIG.maxAge,
+      ...this._config.cors
+    } as Required<CORSConfig>
+
+    const headers: Record<string, string> = {
+      "Access-Control-Allow-Origin": corsConfig.allowOrigin,
+      "Access-Control-Allow-Methods": corsConfig.allowMethods,
+      "Access-Control-Allow-Headers": corsConfig.allowHeaders,
+      "Access-Control-Expose-Headers": corsConfig.exposeHeaders
+    }
+
+    if (includeMaxAge) {
+      headers["Access-Control-Max-Age"] = corsConfig.maxAge
+    }
+
+    return headers
   }
 
   async start(): Promise<void> {
@@ -88,16 +106,12 @@ export class SSEServerTransport extends AbstractTransport {
     logger.debug(`Incoming request: ${req.method} ${req.url}`)
 
     if (req.method === "OPTIONS") {
-      const preflightHeaders = {
-        ...CORS_HEADERS,
-        "Access-Control-Max-Age": "86400"
-      }
-      setResponseHeaders(res, preflightHeaders)
+      setResponseHeaders(res, this.getCorsHeaders(true))
       res.writeHead(204).end()
       return
     }
 
-    setResponseHeaders(res, CORS_HEADERS)
+    setResponseHeaders(res, this.getCorsHeaders())
 
     const url = new URL(req.url!, `http://${req.headers.host}`)
     const sessionId = url.searchParams.get("sessionId")
@@ -194,7 +208,7 @@ export class SSEServerTransport extends AbstractTransport {
     
     const headers = {
       ...SSE_HEADERS,
-      ...CORS_HEADERS,
+      ...this.getCorsHeaders(),
       ...this._config.headers
     }
     setResponseHeaders(res, headers)
@@ -300,12 +314,6 @@ export class SSEServerTransport extends AbstractTransport {
         method: method,
         params: params
       })}`);
-
-      logger.debug(`Processing RPC message: ${JSON.stringify({
-        id: rpcMessage.id,
-        method: rpcMessage.method,
-        params: rpcMessage.params
-      })}`)
 
       if (!this._onmessage) {
         throw new Error("No message handler registered")

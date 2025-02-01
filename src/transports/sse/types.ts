@@ -1,6 +1,41 @@
 import { AuthConfig } from "../../auth/types.js";
 
 /**
+ * CORS configuration options for SSE transport
+ */
+export interface CORSConfig {
+  /**
+   * Access-Control-Allow-Origin header
+   * @default "*"
+   */
+  allowOrigin?: string;
+
+  /**
+   * Access-Control-Allow-Methods header
+   * @default "GET, POST, OPTIONS"
+   */
+  allowMethods?: string;
+
+  /**
+   * Access-Control-Allow-Headers header
+   * @default "Content-Type, Authorization, x-api-key"
+   */
+  allowHeaders?: string;
+
+  /**
+   * Access-Control-Expose-Headers header
+   * @default "Content-Type, Authorization, x-api-key"
+   */
+  exposeHeaders?: string;
+
+  /**
+   * Access-Control-Max-Age header for preflight requests
+   * @default "86400"
+   */
+  maxAge?: string;
+}
+
+/**
  * Configuration options for SSE transport
  */
 export interface SSETransportConfig {
@@ -33,6 +68,11 @@ export interface SSETransportConfig {
   headers?: Record<string, string>;
 
   /**
+   * CORS configuration
+   */
+  cors?: CORSConfig;
+
+  /**
    * Authentication configuration
    */
   auth?: AuthConfig;
@@ -41,9 +81,21 @@ export interface SSETransportConfig {
 /**
  * Internal configuration type with required fields except headers
  */
-export type SSETransportConfigInternal = Required<Omit<SSETransportConfig, 'headers' | 'auth'>> & {
+export type SSETransportConfigInternal = Required<Omit<SSETransportConfig, 'headers' | 'auth' | 'cors'>> & {
   headers?: Record<string, string>;
   auth?: AuthConfig;
+  cors?: CORSConfig;
+};
+
+/**
+ * Default CORS configuration
+ */
+export const DEFAULT_CORS_CONFIG: CORSConfig = {
+  allowOrigin: "*",
+  allowMethods: "GET, POST, OPTIONS",
+  allowHeaders: "Content-Type, Authorization, x-api-key",
+  exposeHeaders: "Content-Type, Authorization, x-api-key",
+  maxAge: "86400"
 };
 
 /**

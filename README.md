@@ -95,7 +95,52 @@ const server = new MCPServer({
     options: {
       port: 8080,            // Optional (default: 8080)
       endpoint: "/sse",      // Optional (default: "/sse")
-      messageEndpoint: "/messages" // Optional (default: "/messages")
+      messageEndpoint: "/messages", // Optional (default: "/messages")
+      cors: {
+        allowOrigin: "*",    // Optional (default: "*")
+        allowMethods: "GET, POST, OPTIONS", // Optional (default: "GET, POST, OPTIONS")
+        allowHeaders: "Content-Type, Authorization, x-api-key", // Optional (default: "Content-Type, Authorization, x-api-key")
+        exposeHeaders: "Content-Type, Authorization, x-api-key", // Optional (default: "Content-Type, Authorization, x-api-key")
+        maxAge: "86400"      // Optional (default: "86400")
+      }
+    }
+  }
+});
+```
+
+#### CORS Configuration
+
+The SSE transport supports flexible CORS configuration. By default, it uses permissive settings suitable for development. For production, you should configure CORS according to your security requirements:
+
+```typescript
+const server = new MCPServer({
+  transport: {
+    type: "sse",
+    options: {
+      // Restrict to specific origin
+      cors: {
+        allowOrigin: "https://myapp.com",
+        allowMethods: "GET, POST",
+        allowHeaders: "Content-Type, Authorization",
+        exposeHeaders: "Content-Type, Authorization",
+        maxAge: "3600"
+      }
+    }
+  }
+});
+
+// Or with multiple allowed origins
+const server = new MCPServer({
+  transport: {
+    type: "sse",
+    options: {
+      cors: {
+        allowOrigin: "https://app1.com, https://app2.com",
+        allowMethods: "GET, POST, OPTIONS",
+        allowHeaders: "Content-Type, Authorization, Custom-Header",
+        exposeHeaders: "Content-Type, Authorization",
+        maxAge: "86400"
+      }
     }
   }
 });
