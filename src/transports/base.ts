@@ -2,8 +2,7 @@ import { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 
 /**
- * Base transport interface that all MCP Framework transports must implement.
- * Extends the SDK's Transport interface with framework-specific additions.
+ * Base transport interface
  */
 export interface BaseTransport extends Transport {
   /**

@@ -1,5 +1,5 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { StdioServerTransport } from "../transports/stdio/server.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -27,7 +27,9 @@ export type TransportType = "stdio" | "sse";
 
 export interface TransportConfig {
   type: TransportType;
-  options?: SSETransportConfig;
+  options?: SSETransportConfig & {
+    auth?: SSETransportConfig['auth'];
+  };
 }
 
 export interface MCPServerConfig {
@@ -108,7 +110,7 @@ export class MCPServer {
       }
       case "stdio":
         logger.info("Starting stdio transport");
-        transport = new StdioServerTransport() as unknown as BaseTransport;
+        transport = new StdioServerTransport();
         break;
       default:
         throw new Error(`Unsupported transport type: ${this.transportConfig.type}`);
@@ -169,30 +171,52 @@ export class MCPServer {
   }
 
   private setupHandlers() {
-    this.server.setRequestHandler(ListToolsRequestSchema, async () => {
-      return {
-        tools: Array.from(this.toolsMap.values()).map(
-          (tool) => tool.toolDefinition
-        ),
+    this.server.setRequestHandler(ListToolsRequestSchema, async (request) => {
+      logger.debug(`Received ListTools request: ${JSON.stringify(request)}`);
+      
+      const tools = Array.from(this.toolsMap.values()).map(
+        (tool) => tool.toolDefinition
+      );
+      
+      logger.debug(`Found ${tools.length} tools to return`);
+      logger.debug(`Tool definitions: ${JSON.stringify(tools)}`);
+      
+      const response = {
+        tools: tools,
+        nextCursor: undefined
       };
+      
+      logger.debug(`Sending ListTools response: ${JSON.stringify(response)}`);
+      return response;
     });
 
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
+      logger.debug(`Tool call request received for: ${request.params.name}`);
+      logger.debug(`Tool call arguments: ${JSON.stringify(request.params.arguments)}`);
+
       const tool = this.toolsMap.get(request.params.name);
       if (!tool) {
-        throw new Error(
-          `Unknown tool: ${request.params.name}. Available tools: ${Array.from(
-            this.toolsMap.keys()
-          ).join(", ")}`
-        );
+        const availableTools = Array.from(this.toolsMap.keys());
+        const errorMsg = `Unknown tool: ${request.params.name}. Available tools: ${availableTools.join(", ")}`;
+        logger.error(errorMsg);
+        throw new Error(errorMsg);
       }
 
-      const toolRequest = {
-        params: request.params,
-        method: "tools/call" as const,
-      };
+      try {
+        logger.debug(`Executing tool: ${tool.name}`);
+        const toolRequest = {
+          params: request.params,
+          method: "tools/call" as const,
+        };
 
-      return tool.toolCall(toolRequest);
+        const result = await tool.toolCall(toolRequest);
+        logger.debug(`Tool execution successful: ${JSON.stringify(result)}`);
+        return result;
+      } catch (error) {
+        const errorMsg = `Tool execution failed: ${error}`;
+        logger.error(errorMsg);
+        throw new Error(errorMsg);
+      }
     });
 
     if (this.capabilities.prompts) {
@@ -322,6 +346,7 @@ export class MCPServer {
 
       await this.detectCapabilities();
 
+      logger.debug("Creating MCP Server instance");
       this.server = new Server(
         {
           name: this.serverName,
@@ -332,10 +357,82 @@ export class MCPServer {
         }
       );
 
+      logger.debug(`Server created with capabilities: ${JSON.stringify(this.capabilities)}`);
       this.setupHandlers();
-
+      
       logger.info("Starting transport...");
       this.transport = this.createTransport();
+      
+      const originalTransportSend = this.transport.send.bind(this.transport);
+      this.transport.send = async (message) => {
+        logger.debug(`Transport sending message: ${JSON.stringify(message)}`);
+        return originalTransportSend(message);
+      };
+
+      this.transport.onmessage = async (message: any) => {
+        logger.debug(`Transport received message: ${JSON.stringify(message)}`);
+        
+        try {
+          if (message.method === 'initialize') {
+            logger.debug('Processing initialize request');
+            
+            await this.transport?.send({
+              jsonrpc: "2.0" as const,
+              id: message.id,
+              result: {
+                protocolVersion: "2024-11-05",
+                capabilities: this.capabilities,
+                serverInfo: {
+                  name: this.serverName,
+                  version: this.serverVersion
+                }
+              }
+            });
+
+            await this.transport?.send({
+              jsonrpc: "2.0" as const,
+              method: "server/ready",
+              params: {}
+            });
+
+            logger.debug('Initialization sequence completed');
+            return;
+          }
+
+          if (message.method === 'tools/list') {
+            logger.debug('Processing tools/list request');
+            const tools = Array.from(this.toolsMap.values()).map(
+              (tool) => tool.toolDefinition
+            );
+            
+            await this.transport?.send({
+              jsonrpc: "2.0" as const,
+              id: message.id,
+              result: {
+                tools,
+                nextCursor: undefined
+              }
+            });
+            return;
+          }
+
+          logger.debug(`Unhandled message method: ${message.method}`);
+        } catch (error) {
+          logger.error(`Error handling message: ${error}`);
+          if ('id' in message) {
+            await this.transport?.send({
+              jsonrpc: "2.0" as const,
+              id: message.id,
+              error: {
+                code: -32000,
+                message: String(error),
+                data: { type: "handler_error" }
+              }
+            });
+          }
+        }
+      };
+
       await this.server.connect(this.transport);
       logger.info("Transport connected successfully");
 

@@ -1,10 +1,11 @@
+import { AuthConfig } from "../../auth/types.js";
+
 /**
  * Configuration options for SSE transport
  */
 export interface SSETransportConfig {
   /**
    * Port to listen on
-   * @default 8080
    */
   port?: number;
 
@@ -30,13 +31,19 @@ export interface SSETransportConfig {
    * Custom headers to add to SSE responses
    */
   headers?: Record<string, string>;
+
+  /**
+   * Authentication configuration
+   */
+  auth?: AuthConfig;
 }
 
 /**
  * Internal configuration type with required fields except headers
  */
-export type SSETransportConfigInternal = Required<Omit<SSETransportConfig, 'headers'>> & {
+export type SSETransportConfigInternal = Required<Omit<SSETransportConfig, 'headers' | 'auth'>> & {
   headers?: Record<string, string>;
+  auth?: AuthConfig;
 };
 
 /**

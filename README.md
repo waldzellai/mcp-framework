@@ -1,150 +1,26 @@
-# mcp-framework
+# MCP Framework
 
-MCP is a framework for building Model Context Protocol (MCP) servers elegantly in TypeScript.
+MCP-Framework is a framework for building Model Context Protocol (MCP) servers elegantly in TypeScript.
 
 MCP-Framework gives you architecture out of the box, with automatic directory-based discovery for tools, resources, and prompts. Use our powerful MCP abstractions to define tools, resources, or prompts in an elegant way. Our cli makes getting started with your own MCP server a breeze
-
-[Read the full docs here](https://mcp-framework.com)
-
-Get started fast with mcp-framework ⚡⚡⚡
-
 ## Features
 
-- 🛠️ Automatic directory-based discovery and loading for tools, prompts, and resources
-- 🏗️ Powerful abstractions with full type safety
-- 🚀 Simple server setup and configuration
-- 📦 CLI for rapid development and project scaffolding
+- Automatic discovery and loading of tools, resources, and prompts
+- Multiple transport support (stdio, SSE)
+- TypeScript-first development with full type safety
+- Built on the official MCP SDK
+- Easy-to-use base classes for tools, prompts, and resources
+- Optional authentication for SSE endpoints
 
-## Quick Start
-
-### Using the CLI (Recommended)
-
-```bash
-# Install the framework globally
-npm install -g mcp-framework
-
-# Create a new MCP server project
-mcp create my-mcp-server
-
-# Navigate to your project
-cd my-mcp-server
-
-# Your server is ready to use!
-```
-
-### Manual Installation
+## Installation
 
 ```bash
 npm install mcp-framework
 ```
 
-## CLI Usage
+## Quick Start
 
-The framework provides a powerful CLI for managing your MCP server projects:
-
-### Project Creation
-
-```bash
-# Create a new project
-mcp create <your project name here>
-```
-
-### Adding a Tool
-
-```bash
-# Add a new tool
-mcp add tool price-fetcher
-```
-
-### Adding a Prompt
-
-```bash
-# Add a new prompt
-mcp add prompt price-analysis
-```
-
-### Adding a Resource
-
-```bash
-# Add a new prompt
-mcp add resource market-data
-```
-
-## Development Workflow
-
-1. Create your project:
-
-```bash
-  mcp create my-mcp-server
-  cd my-mcp-server
-```
-
-2. Add tools as needed:
-
-   ```bash
-   mcp add tool data-fetcher
-   mcp add tool data-processor
-   mcp add tool report-generator
-   ```
-
-3. Build:
-
-   ```bash
-   npm run build
-
-   ```
-
-4. Add to MCP Client (Read below for Claude Desktop example)
-
-## Using with Claude Desktop
-
-### Local Development
-
-Add this configuration to your Claude Desktop config file:
-
-**MacOS**: \`~/Library/Application Support/Claude/claude_desktop_config.json\`
-**Windows**: \`%APPDATA%/Claude/claude_desktop_config.json\`
-
-```json
-{
-"mcpServers": {
-"${projectName}": {
-      "command": "node",
-      "args":["/absolute/path/to/${projectName}/dist/index.js"]
-}
-}
-}
-```
-
-### After Publishing
-
-Add this configuration to your Claude Desktop config file:
-
-**MacOS**: \`~/Library/Application Support/Claude/claude_desktop_config.json\`
-**Windows**: \`%APPDATA%/Claude/claude_desktop_config.json\`
-
-```json
-{
-"mcpServers": {
-"${projectName}": {
-      "command": "npx",
-      "args": ["${projectName}"]
-}
-}
-}
-```
-
-## Building and Testing
-
-1. Make changes to your tools
-2. Run \`npm run build\` to compile
-3. The server will automatically load your tools on startup
-
-## Components Overview
-
-### 1. Tools (Main Component)
-
-Tools are the primary way to extend an LLM's capabilities. Each tool should perform a specific function:
+### Creating a Tool
 
 ```typescript
 import { MCPTool } from "mcp-framework";
@@ -173,149 +49,139 @@ class ExampleTool extends MCPTool<ExampleInput> {
 export default ExampleTool;
 ```
 
-### 2. Prompts (Optional)
-
-Prompts help structure conversations with Claude:
+### Setting up the Server
 
 ```typescript
-import { MCPPrompt } from "mcp-framework";
-import { z } from "zod";
+import { MCPServer } from "mcp-framework";
 
-interface GreetingInput {
-  name: string;
-  language?: string;
-}
+const server = new MCPServer();
 
-class GreetingPrompt extends MCPPrompt<GreetingInput> {
-  name = "greeting";
-  description = "Generate a greeting in different languages";
-
-  schema = {
-    name: {
-      type: z.string(),
-      description: "Name to greet",
-      required: true,
-    },
-    language: {
-      type: z.string().optional(),
-      description: "Language for greeting",
-      required: false,
-    },
-  };
-
-  async generateMessages({ name, language = "English" }: GreetingInput) {
-    return [
-      {
-        role: "user",
-        content: {
-          type: "text",
-          text: `Generate a greeting for ${name} in ${language}`,
-        },
-      },
-    ];
+// OR (mutually exclusive!) with SSE transport
+const server = new MCPServer({
+  transport: {
+    type: "sse",
+    options: {
+      port: 8080            // Optional (default: 8080)
+    }
   }
-}
+});
 
-export default GreetingPrompt;
+// Start the server
+await server.start();
 ```
 
-### 3. Resources (Optional)
+## Transport Configuration
 
-Resources provide data access capabilities:
+### stdio Transport (Default)
+
+The stdio transport is used by default if no transport configuration is provided:
 
 ```typescript
-import { MCPResource, ResourceContent } from "mcp-framework";
+const server = new MCPServer();
+// or explicitly:
+const server = new MCPServer({
+  transport: { type: "stdio" }
+});
+```
 
-class ConfigResource extends MCPResource {
-  uri = "config://app/settings";
-  name = "Application Settings";
-  description = "Current application configuration";
-  mimeType = "application/json";
+### SSE Transport
 
-  async read(): Promise<ResourceContent[]> {
-    const config = {
-      theme: "dark",
-      language: "en",
+To use Server-Sent Events (SSE) transport:
+
+```typescript
+const server = new MCPServer({
+  transport: {
+    type: "sse",
+    options: {
+      port: 8080,            // Optional (default: 8080)
+      endpoint: "/sse",      // Optional (default: "/sse")
+      messageEndpoint: "/messages" // Optional (default: "/messages")
+    }
+  }
+});
+```
+
+## Authentication
+
+MCP Framework provides optional authentication for SSE endpoints. You can choose between JWT and API Key authentication, or implement your own custom authentication provider.
+
+### JWT Authentication
+
+```typescript
+import { MCPServer, JWTAuthProvider } from "mcp-framework";
+import { Algorithm } from "jsonwebtoken";
+
+const server = new MCPServer({
+  transport: {
+    type: "sse",
+    options: {
+      auth: {
+        provider: new JWTAuthProvider({
+          secret: process.env.JWT_SECRET,
+          algorithms: ["HS256" as Algorithm], // Optional (default: ["HS256"])
+          headerName: "Authorization"         // Optional (default: "Authorization")
+        }),
+        endpoints: {
+          sse: true,      // Protect SSE endpoint (default: false)
+          messages: true  // Protect message endpoint (default: true)
+        }
+      }
+    }
+  }
+});
+```
+
+Clients must include a valid JWT token in the Authorization header:
+```
+Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
+```
+
+### API Key Authentication
+
+```typescript
+import { MCPServer, APIKeyAuthProvider } from "mcp-framework";
+
+const server = new MCPServer({
+  transport: {
+    type: "sse",
+    options: {
+      auth: {
+        provider: new APIKeyAuthProvider({
+          keys: [process.env.API_KEY],
+          headerName: "X-API-Key" // Optional (default: "X-API-Key")
+        })
+      }
+    }
+  }
+});
+```
+
+Clients must include a valid API key in the X-API-Key header:
+```
+X-API-Key: your-api-key
+```
+
+### Custom Authentication
+
+You can implement your own authentication provider by implementing the `AuthProvider` interface:
+
+```typescript
+import { AuthProvider, AuthResult } from "mcp-framework";
+import { IncomingMessage } from "node:http";
+
+class CustomAuthProvider implements AuthProvider {
+  async authenticate(req: IncomingMessage): Promise<boolean | AuthResult> {
+    // Implement your custom authentication logic
+    return true;
+  }
+
+  getAuthError() {
+    return {
+      status: 401,
+      message: "Authentication failed"
     };
-
-    return [
-      {
-        uri: this.uri,
-        mimeType: this.mimeType,
-        text: JSON.stringify(config, null, 2),
-      },
-    ];
   }
 }
-
-export default ConfigResource;
-```
-
-## Project Structure
-
-```
-your-project/
-├── src/
-│   ├── tools/          # Tool implementations (Required)
-│   │   └── ExampleTool.ts
-│   ├── prompts/        # Prompt implementations (Optional)
-│   │   └── GreetingPrompt.ts
-│   ├── resources/      # Resource implementations (Optional)
-│   │   └── ConfigResource.ts
-│   └── index.ts
-├── package.json
-└── tsconfig.json
-```
-
-## Automatic Feature Discovery
-
-The framework automatically discovers and loads:
-
-- Tools from the `src/tools` directory
-- Prompts from the `src/prompts` directory (if present)
-- Resources from the `src/resources` directory (if present)
-
-Each feature should be in its own file and export a default class that extends the appropriate base class:
-
-- `MCPTool` for tools
-- `MCPPrompt` for prompts
-- `MCPResource` for resources
-
-### Base Classes
-
-#### MCPTool
-
-- Handles input validation using Zod
-- Provides error handling and response formatting
-- Includes fetch helper for HTTP requests
-
-#### MCPPrompt
-
-- Manages prompt arguments and validation
-- Generates message sequences for LLM interactions
-- Supports dynamic prompt templates
-
-#### MCPResource
-
-- Exposes data through URI-based system
-- Supports text and binary content
-- Optional subscription capabilities for real-time updates
-
-## Type Safety
-
-All features use Zod for runtime type validation and TypeScript for compile-time type checking. Define your input schemas using Zod types:
-
-```typescript
-schema = {
-  parameter: {
-    type: z.string().email(),
-    description: "User email address",
-  },
-  count: {
-    type: z.number().min(1).max(100),
-    description: "Number of items",
-  },
-};
 ```
 
 ## License
