@@ -3,20 +3,141 @@
 MCP-Framework is a framework for building Model Context Protocol (MCP) servers elegantly in TypeScript.
 
 MCP-Framework gives you architecture out of the box, with automatic directory-based discovery for tools, resources, and prompts. Use our powerful MCP abstractions to define tools, resources, or prompts in an elegant way. Our cli makes getting started with your own MCP server a breeze
+
 ## Features
 
-- Automatic discovery and loading of tools, resources, and prompts
+- 🛠️ Automatic discovery and loading of tools, resources, and prompts
 - Multiple transport support (stdio, SSE)
 - TypeScript-first development with full type safety
 - Built on the official MCP SDK
 - Easy-to-use base classes for tools, prompts, and resources
-- Optional authentication for SSE endpoints
+- Out of the box authentication for SSE endpoints
 
-## Installation
+
+# [Read the full docs here](https://mcp-framework.com)
+
+
+
+
+
+## Creating a repository with mcp-framework
+
+### Using the CLI (Recommended)
 
 ```bash
-npm install mcp-framework
+# Install the framework globally
+npm install -g mcp-framework
+
+# Create a new MCP server project
+mcp create my-mcp-server
+
+# Navigate to your project
+cd my-mcp-server
+
+# Your server is ready to use!
 ```
+
+## CLI Usage
+
+The framework provides a powerful CLI for managing your MCP server projects:
+
+### Project Creation
+
+```bash
+# Create a new project
+mcp create <your project name here>
+```
+
+### Adding a Tool
+
+```bash
+# Add a new tool
+mcp add tool price-fetcher
+```
+
+### Adding a Prompt
+
+```bash
+# Add a new prompt
+mcp add prompt price-analysis
+```
+
+### Adding a Resource
+
+```bash
+# Add a new prompt
+mcp add resource market-data
+```
+
+## Development Workflow
+
+1. Create your project:
+
+```bash
+  mcp create my-mcp-server
+  cd my-mcp-server
+```
+
+2. Add tools as needed:
+
+   ```bash
+   mcp add tool data-fetcher
+   mcp add tool data-processor
+   mcp add tool report-generator
+   ```
+
+3. Build:
+
+   ```bash
+   npm run build
+
+   ```
+
+4. Add to MCP Client (Read below for Claude Desktop example)
+
+## Using with Claude Desktop
+
+### Local Development
+
+Add this configuration to your Claude Desktop config file:
+
+**MacOS**: \`~/Library/Application Support/Claude/claude_desktop_config.json\`
+**Windows**: \`%APPDATA%/Claude/claude_desktop_config.json\`
+
+```json
+{
+"mcpServers": {
+"${projectName}": {
+      "command": "node",
+      "args":["/absolute/path/to/${projectName}/dist/index.js"]
+}
+}
+}
+```
+
+### After Publishing
+
+Add this configuration to your Claude Desktop config file:
+
+**MacOS**: \`~/Library/Application Support/Claude/claude_desktop_config.json\`
+**Windows**: \`%APPDATA%/Claude/claude_desktop_config.json\`
+
+```json
+{
+"mcpServers": {
+"${projectName}": {
+      "command": "npx",
+      "args": ["${projectName}"]
+}
+}
+}
+```
+
+## Building and Testing
+
+1. Make changes to your tools
+2. Run \`npm run build\` to compile
+3. The server will automatically load your tools on startup
 
 ## Quick Start
 
