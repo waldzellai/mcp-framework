@@ -61,7 +61,7 @@ export async function createProject(name?: string) {
         start: "node dist/index.js"
       },
       dependencies: {
-        "mcp-framework": "^0.1.23",
+        "mcp-framework": "^0.1.24",
       },
       devDependencies: {
         "@types/node": "^20.11.24",
@@ -89,8 +89,7 @@ export async function createProject(name?: string) {
 
 const server = new MCPServer();
 
-server.start();
-});`;
+server.start();`;
 
     const exampleToolTs = `import { MCPTool } from "mcp-framework";
 import { z } from "zod";
