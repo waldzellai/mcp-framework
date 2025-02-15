@@ -58,9 +58,10 @@ export async function createProject(name?: string) {
         build: "mcp-build",
         prepare: "npm run build",
         watch: "tsc --watch",
+        start: "node dist/index.js"
       },
       dependencies: {
-        "mcp-framework": "^0.1.8",
+        "mcp-framework": "^0.1.23",
       },
       devDependencies: {
         "@types/node": "^20.11.24",
@@ -88,9 +89,7 @@ export async function createProject(name?: string) {
 
 const server = new MCPServer();
 
-server.start().catch((error) => {
-  console.error("Server error:", error);
-  process.exit(1);
+server.start();
 });`;
 
     const exampleToolTs = `import { MCPTool } from "mcp-framework";
