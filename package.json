@@ -30,7 +30,11 @@
     "anthropic",
     "ai",
     "framework",
-    "tools"
+    "tools",
+    "modelcontextprotocol",
+    "model",
+    "context",
+    "protocol"
   ],
   "peerDependencies": {
     "@modelcontextprotocol/sdk": "^0.6.0"
