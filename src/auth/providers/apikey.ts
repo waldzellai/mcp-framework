@@ -2,6 +2,7 @@ import { IncomingMessage } from "node:http";
 import { logger } from "../../core/Logger.js";
 import { AuthProvider, AuthResult, DEFAULT_AUTH_ERROR } from "../types.js";
 
+export const DEFAULT_API_KEY_HEADER_NAME = "X-API-Key"
 /**
  * Configuration options for API key authentication
  */
@@ -26,7 +27,7 @@ export class APIKeyAuthProvider implements AuthProvider {
 
   constructor(config: APIKeyConfig) {
     this.config = {
-      headerName: "X-API-Key",
+      headerName: DEFAULT_API_KEY_HEADER_NAME,
       ...config
     };
 
@@ -78,24 +79,21 @@ export class APIKeyAuthProvider implements AuthProvider {
     }
     
     if (!apiKey) {
-      logger.debug(`API Key header missing. Checked variations: ${headerVariations.join(', ')}`);
+      logger.debug(`API Key header missing}`);
       logger.debug(`Available headers: ${Object.keys(req.headers).join(', ')}`);
       return false;
     }
 
     logger.debug(`Found API key in header: ${matchedHeader}`);
-    logger.debug(`Comparing provided key: ${apiKey.substring(0, 3)}... with ${this.config.keys.length} configured keys`);
     
     for (const validKey of this.config.keys) {
-      logger.debug(`Comparing with key: ${validKey.substring(0, 3)}...`);
       if (apiKey === validKey) {
-        logger.debug(`API Key authentication successful - matched key starting with ${validKey.substring(0, 3)}...`);
+        logger.debug(`API Key authentication successful`);
         return true;
       }
     }
 
-    logger.debug(`Invalid API Key provided: ${apiKey.substring(0, 3)}...`);
-    logger.debug(`Expected one of: ${this.config.keys.map(k => k.substring(0, 3) + '...').join(', ')}`);
+    logger.debug(`Invalid API Key provided`);
     return false;
   }
 
