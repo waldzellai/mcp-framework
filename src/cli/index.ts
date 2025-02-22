@@ -11,7 +11,7 @@ const program = new Command();
 program
   .name("mcp")
   .description("CLI for managing MCP server projects")
-  .version("0.1.24");
+  .version("0.1.25");
 
 program
   .command("build")

@@ -46,7 +46,6 @@ export class SSEServerTransport extends AbstractTransport {
   }
 
   private getCorsHeaders(includeMaxAge: boolean = false): Record<string, string> {
-    // Ensure all CORS properties are present by merging with defaults
     const corsConfig = {
       allowOrigin: DEFAULT_CORS_CONFIG.allowOrigin,
       allowMethods: DEFAULT_CORS_CONFIG.allowMethods,
@@ -125,13 +124,13 @@ export class SSEServerTransport extends AbstractTransport {
       if (this._sseResponse?.writableEnded) {
         this._sseResponse = undefined
       }
-  
+
       if (this._sseResponse) {
-        logger.warn("SSE connection already established")
-        res.writeHead(409).end("SSE connection already established")
-        return
+        logger.warn("SSE connection already established; closing the old connection to allow a new one.")
+        this._sseResponse.end()
+        this.cleanupConnection()
       }
-  
+
       this.setupSSEConnection(res)
       return
     }
@@ -204,7 +203,7 @@ export class SSEServerTransport extends AbstractTransport {
   }
 
   private setupSSEConnection(res: ServerResponse): void {
-    logger.debug(`Setting up SSE connection for session: ${this._sessionId}`);
+    logger.debug(`Setting up SSE connection for session: ${this._sessionId}`)
     
     const headers = {
       ...SSE_HEADERS,
@@ -212,40 +211,40 @@ export class SSEServerTransport extends AbstractTransport {
       ...this._config.headers
     }
     setResponseHeaders(res, headers)
-    logger.debug(`SSE headers set: ${JSON.stringify(headers)}`);
+    logger.debug(`SSE headers set: ${JSON.stringify(headers)}`)
 
     if (res.socket) {
-      res.socket.setNoDelay(true)        
-      res.socket.setTimeout(0)            
-      res.socket.setKeepAlive(true, 1000) 
-      logger.debug('Socket optimized for SSE connection');
+      res.socket.setNoDelay(true)
+      res.socket.setTimeout(0)
+      res.socket.setKeepAlive(true, 1000)
+      logger.debug('Socket optimized for SSE connection')
     }
 
-    const endpointUrl = `${this._config.messageEndpoint}?sessionId=${this._sessionId}`;
-    logger.debug(`Sending endpoint URL: ${endpointUrl}`);
-    res.write(`event: endpoint\ndata: ${endpointUrl}\n\n`);
+    const endpointUrl = `${this._config.messageEndpoint}?sessionId=${this._sessionId}`
+    logger.debug(`Sending endpoint URL: ${endpointUrl}`)
+    res.write(`event: endpoint\ndata: ${endpointUrl}\n\n`)
     
-    logger.debug('Sending initial keep-alive');
-    res.write(": keep-alive\n\n");
+    logger.debug('Sending initial keep-alive')
+    res.write(": keep-alive\n\n")
 
     this._keepAliveInterval = setInterval(() => {
       if (this._sseResponse && !this._sseResponse.writableEnded) {
         try {
-          logger.debug('Sending keep-alive ping');
-          this._sseResponse.write(": keep-alive\n\n");
+          logger.debug('Sending keep-alive ping')
+          this._sseResponse.write(": keep-alive\n\n")
           
           const pingMessage = {
             jsonrpc: "2.0",
             method: "ping",
             params: { timestamp: Date.now() }
-          };
-          this._sseResponse.write(`data: ${JSON.stringify(pingMessage)}\n\n`);
+          }
+          this._sseResponse.write(`data: ${JSON.stringify(pingMessage)}\n\n`)
         } catch (error) {
-          logger.error(`Error sending keep-alive: ${error}`);
-          this.cleanupConnection();
+          logger.error(`Error sending keep-alive: ${error}`)
+          this.cleanupConnection()
         }
       }
-    }, 15000) 
+    }, 15000)
 
     this._sseResponse = res
 
@@ -294,26 +293,26 @@ export class SSEServerTransport extends AbstractTransport {
         return parsed
       })()
 
-      const { id, method, params } = rawMessage as any;
-      logger.debug(`Parsed message - ID: ${id}, Method: ${method}`);
+      const { id, method, params } = rawMessage as any
+      logger.debug(`Parsed message - ID: ${id}, Method: ${method}`)
 
       const rpcMessage: JSONRPCMessage = {
         jsonrpc: "2.0",
         id: id,
         method: method,
         params: params
-      };
+      }
 
       currentMessage = {
         id: id,
         method: method
-      };
+      }
 
       logger.debug(`Processing RPC message: ${JSON.stringify({
         id: id,
         method: method,
         params: params
-      })}`);
+      })}`)
 
       if (!this._onmessage) {
         throw new Error("No message handler registered")
@@ -382,9 +381,6 @@ export class SSEServerTransport extends AbstractTransport {
     })
   }
 
-  /**
-   * Clean up SSE connection resources
-   */
   private cleanupConnection(): void {
     if (this._keepAliveInterval) {
       clearInterval(this._keepAliveInterval)
