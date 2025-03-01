@@ -75,10 +75,7 @@ export class MCPServer {
   private shutdownResolve?: () => void;
 
   constructor(config: MCPServerConfig = {}) {
-    this.basePath = config.basePath 
-      ? resolve(config.basePath)
-      : join(process.cwd(), 'dist');
-
+    this.basePath = this.resolveBasePath(config.basePath);
     this.serverName = config.name ?? this.getDefaultName();
     this.serverVersion = config.version ?? this.getDefaultVersion();
     this.transportConfig = config.transport ?? { type: "stdio" };
@@ -87,13 +84,23 @@ export class MCPServer {
       `Initializing MCP Server: ${this.serverName}@${this.serverVersion}`
     );
 
-    this.toolLoader = new ToolLoader(join(this.basePath, 'tools'));
-    this.promptLoader = new PromptLoader(join(this.basePath, 'prompts'));
-    this.resourceLoader = new ResourceLoader(join(this.basePath, 'resources'));
+    this.toolLoader = new ToolLoader(this.basePath);
+    this.promptLoader = new PromptLoader(this.basePath);
+    this.resourceLoader = new ResourceLoader(this.basePath);
 
-    logger.debug(`Looking for tools in: ${join(this.basePath, 'tools')}`);
-    logger.debug(`Looking for prompts in: ${join(this.basePath, 'prompts')}`);
-    logger.debug(`Looking for resources in: ${join(this.basePath, 'resources')}`);
+    logger.debug(`Looking for tools in: ${join(dirname(this.basePath), 'tools')}`);
+    logger.debug(`Looking for prompts in: ${join(dirname(this.basePath), 'prompts')}`);
+    logger.debug(`Looking for resources in: ${join(dirname(this.basePath), 'resources')}`);
+  }
+
+  private resolveBasePath(configPath?: string): string {
+    if (configPath) {
+      return configPath;
+    }
+    if (process.argv[1]) {
+      return process.argv[1];
+    }
+    return process.cwd();
   }
 
   private createTransport(): BaseTransport {
