@@ -1,36 +1,44 @@
 #!/usr/bin/env node
 import { execa } from "execa";
 import { readFile, writeFile } from "fs/promises";
-import { join } from "path";
-
-process.stderr.write("MCP Build Script Starting...\n");
+import { join, dirname } from "path";
+import { findUp } from 'find-up';
 
 export async function buildFramework() {
+    process.stderr.write("MCP Build Script Starting...\n");
     process.stderr.write("Finding project root...\n");
     
     const startDir = process.cwd();
     process.stderr.write(`Starting search from: ${startDir}\n`);
     
-    if (process.argv.includes('create')) {
-        process.stderr.write(`Skipping build for create command\n`);
-        return;
+    const skipValidation = process.env.MCP_SKIP_VALIDATION === 'true';
+    if (skipValidation) {
+        process.stderr.write(`Skipping dependency validation\n`);
     }
     
     try {
-        const pkgPath = join(startDir, 'package.json');
-        const pkgContent = await readFile(pkgPath, 'utf8');
-        const pkg = JSON.parse(pkgContent);
-        
-        if (!pkg.dependencies?.["mcp-framework"]) {
-            throw new Error("This directory is not an MCP project (mcp-framework not found in dependencies)");
+        const pkgPath = await findUp('package.json');
+        if (!pkgPath) {
+            throw new Error("Could not find package.json in current directory or any parent directories");
         }
         
-        process.stderr.write(`Running tsc in ${startDir}\n`);
+        const projectRoot = dirname(pkgPath);
+        
+        if (!skipValidation) {
+            const pkgContent = await readFile(pkgPath, 'utf8');
+            const pkg = JSON.parse(pkgContent);
+            
+            if (!pkg.dependencies?.["mcp-framework"]) {
+                throw new Error("This directory is not an MCP project (mcp-framework not found in dependencies)");
+            }
+        }
+        
+        process.stderr.write(`Running tsc in ${projectRoot}\n`);
         
         const tscCommand = process.platform === 'win32' ? ['npx.cmd', 'tsc'] : ['npx', 'tsc'];
             
         await execa(tscCommand[0], [tscCommand[1]], {
-            cwd: startDir,
+            cwd: projectRoot,
             stdio: "inherit",
             env: {
                 ...process.env,
@@ -39,7 +47,7 @@ export async function buildFramework() {
             }
         });
 
-        const distPath = join(startDir, "dist");
+        const distPath = join(projectRoot, "dist");
         const projectIndexPath = join(distPath, "index.js");
         const shebang = "#!/usr/bin/env node\n";
         
@@ -59,14 +67,6 @@ export async function buildFramework() {
         process.stderr.write(`Error: ${error instanceof Error ? error.message : String(error)}\n`);
         process.exit(1);
     }
-}
-
-if (import.meta.url.startsWith('file:')) {
-    process.stderr.write("Script running as main module\n");
-    buildFramework().catch(error => {
-        process.stderr.write(`Fatal error: ${error instanceof Error ? error.message : String(error)}\n`);
-        process.exit(1);
-    });
 }
 
 export default buildFramework;

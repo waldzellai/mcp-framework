@@ -55,17 +55,17 @@ export async function createProject(name?: string) {
       },
       files: ["dist"],
       scripts: {
-        build: "mcp-build",
+        build: "tsc && mcp-build",
         prepare: "npm run build",
         watch: "tsc --watch",
         start: "node dist/index.js"
       },
       dependencies: {
-        "mcp-framework": "^0.1.27",
+        "mcp-framework": "0.1.28-beta.6"
       },
       devDependencies: {
         "@types/node": "^20.11.24",
-        typescript: "^5.3.3",
+        "typescript": "^5.3.3"
       },
     };
 
@@ -140,14 +140,14 @@ export default ExampleTool;`;
     console.log("Installing dependencies...");
     const npmInstall = spawnSync("npm", ["install"], {
       stdio: "inherit",
-      shell: true,
+      shell: true
     });
 
     if (npmInstall.status !== 0) {
       throw new Error("Failed to install dependencies");
     }
 
-    console.log("Building TypeScript...");
+    console.log("Building project...");
     const tscBuild = await execa('npx', ['tsc'], {
       cwd: projectDir,
       stdio: "inherit",
@@ -157,18 +157,17 @@ export default ExampleTool;`;
       throw new Error("Failed to build TypeScript");
     }
 
-    console.log("Adding shebang...");
-    const mcpBuild = spawnSync("npm", ["run", "build"], {
+    const mcpBuild = await execa('npx', ['mcp-build'], {
+      cwd: projectDir,
       stdio: "inherit",
-      shell: true,
       env: {
         ...process.env,
-        FORCE_COLOR: "1"
+        MCP_SKIP_VALIDATION: "true"
       }
     });
 
-    if (mcpBuild.status !== 0) {
-      throw new Error("Failed to add shebang");
+    if (mcpBuild.exitCode !== 0) {
+      throw new Error("Failed to run mcp-build");
     }
 
     console.log(`
