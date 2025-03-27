@@ -46,7 +46,16 @@ The framework provides a powerful CLI for managing your MCP server projects:
 ```bash
 # Create a new project
 mcp create <your project name here>
+
+# Create a new project with the new EXPERIMENTAL HTTP transport
+Heads up: This will set cors allowed origin to "*", modify it in the index if you wish
+mcp create <your project name here> --http --port 3000 --cors
 ```
+
+# Options:
+# --http: Use HTTP transport instead of default stdio
+# --port <number>: Specify HTTP port (default: 8080)
+# --cors: Enable CORS with wildcard (*) access
 
 ### Adding a Tool
 
@@ -250,47 +259,9 @@ const server = new MCPServer({
 });
 ```
 
-#### CORS Configuration
+### HTTP Stream Transport
 
-The SSE transport supports flexible CORS configuration. By default, it uses permissive settings suitable for development. For production, you should configure CORS according to your security requirements:
-
-```typescript
-const server = new MCPServer({
-  transport: {
-    type: "sse",
-    options: {
-      // Restrict to specific origin
-      cors: {
-        allowOrigin: "https://myapp.com",
-        allowMethods: "GET, POST",
-        allowHeaders: "Content-Type, Authorization",
-        exposeHeaders: "Content-Type, Authorization",
-        maxAge: "3600"
-      }
-    }
-  }
-});
-
-// Or with multiple allowed origins
-const server = new MCPServer({
-  transport: {
-    type: "sse",
-    options: {
-      cors: {
-        allowOrigin: "https://app1.com, https://app2.com",
-        allowMethods: "GET, POST, OPTIONS",
-        allowHeaders: "Content-Type, Authorization, Custom-Header",
-        exposeHeaders: "Content-Type, Authorization",
-        maxAge: "86400"
-      }
-    }
-  }
-});
-```
-
-### HTTP Stream Transport (New!)
-
-The HTTP Stream transport provides a streamable JSON-RPC interface over HTTP with support for batch and streaming response modes:
+To use HTTP Stream transport:
 
 ```typescript
 const server = new MCPServer({
@@ -316,13 +287,9 @@ const server = new MCPServer({
         historyDuration: 300000, // Optional (default: 300000ms = 5min) - how long to keep message history
       },
       
-      // CORS configuration (same as SSE transport)
+      // CORS configuration
       cors: {
-        allowOrigin: "*",
-        allowMethods: "GET, POST, DELETE, OPTIONS",
-        allowHeaders: "Content-Type, Accept, Authorization, x-api-key, Mcp-Session-Id, Last-Event-ID",
-        exposeHeaders: "Content-Type, Authorization, x-api-key, Mcp-Session-Id",
-        maxAge: "86400"
+        allowOrigin: "*"         // Other CORS options use defaults
       }
     }
   }
