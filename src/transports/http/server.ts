@@ -20,31 +20,25 @@ import { logger } from "../../core/Logger.js";
 import { getRequestHeader, setResponseHeaders } from "../../utils/headers.js";
 import { DEFAULT_CORS_CONFIG } from "../sse/types.js";
 
-
 function isRequest(msg: any): msg is JsonRpcRequest {
   return msg && typeof msg.method === 'string' && msg.jsonrpc === "2.0" && 'id' in msg && msg.id !== null && !('result' in msg || 'error' in msg);
 }
-
 
 function isNotification(msg: any): msg is JsonRpcNotification {
   return msg && typeof msg.method === 'string' && msg.jsonrpc === "2.0" && !('id' in msg);
 }
 
-
 function isSuccessResponse(msg: any): msg is JsonRpcSuccessResponse {
   return msg && msg.jsonrpc === "2.0" && 'id' in msg && 'result' in msg && !('error' in msg);
 }
-
 
 function isErrorResponse(msg: any): msg is JsonRpcErrorResponse {
   return msg && msg.jsonrpc === "2.0" && 'id' in msg && 'error' in msg && !('result' in msg);
 }
 
-
 function isResponse(msg: any): msg is JsonRpcSuccessResponse | JsonRpcErrorResponse {
     return isSuccessResponse(msg) || isErrorResponse(msg);
 }
-
 
 const SSE_HEADERS = {
   "Content-Type": "text/event-stream",
@@ -91,7 +85,6 @@ export class HttpStreamTransport extends AbstractTransport {
       corsOrigin: this._config.cors.allowOrigin
     }, null, 2)}`);
   }
-
 
   private getCorsHeaders(req: IncomingMessage, includeMaxAge: boolean = false): Record<string, string> {
     const corsConfig = this._config.cors;
@@ -150,8 +143,6 @@ export class HttpStreamTransport extends AbstractTransport {
     });
   }
 
-
-
   private async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const url = new URL(req.url!, `http://${req.headers.host}`);
     logger.debug(`Incoming request: ${req.method} ${url.pathname}`);
@@ -181,8 +172,6 @@ export class HttpStreamTransport extends AbstractTransport {
         if (!res.writableEnded) res.end(JSON.stringify({ jsonrpc: "2.0", id: error.requestId || null, error: { code: error.code || -32000, message: error.message || 'Internal Server Error', data: error.data } }));
     }
   }
-
-
 
   private async handlePost(req: IncomingMessage, res: ServerResponse): Promise<void> {
     logger.debug(`Handling POST request to ${this._config.endpoint}`);
@@ -227,9 +216,12 @@ export class HttpStreamTransport extends AbstractTransport {
     const isInitialize = parsedMessages.some(msg => isRequest(msg) && msg.method === 'initialize');
     const sessionIdHeader = getRequestHeader(req.headers, this._config.session.headerName);
     let session: SessionData | undefined;
+    
     if (this._config.session.enabled) {
         if (isInitialize) {
-            if (sessionIdHeader) throw this.httpError(400, 'Bad Request: Cannot send session ID with initialize request', -32600, undefined, firstRequestId);
+            if (sessionIdHeader) {
+                throw this.httpError(400, 'Bad Request: Cannot send session ID with initialize request', -32600, undefined, firstRequestId);
+            }
         } else {
             session = this.validateSession(sessionIdHeader, req, true, firstRequestId);
             session.lastActivity = Date.now();
@@ -248,10 +240,19 @@ export class HttpStreamTransport extends AbstractTransport {
     });
 
     if (clientRequests.length === 0) {
-      res.writeHead(202).end(); logger.debug("POST contained only notifications/responses, sent 202 Accepted.");
+      res.writeHead(202).end(); 
+      logger.debug("POST contained only notifications/responses, sent 202 Accepted.");
     } else {
       const responseMode = this._config.responseMode;
       logger.debug(`Processing ${clientRequests.length} requests with responseMode: ${responseMode}`);
+
+      let newSessionId: string | undefined;
+      if (isInitialize && this._config.session.enabled) {
+          newSessionId = randomUUID();
+          session = { id: newSessionId, createdAt: Date.now(), lastActivity: Date.now() };
+          this._activeSessions.set(newSessionId, session);
+          logger.debug(`Created new session: ${newSessionId} for initialization request`);
+      }
 
       if (responseMode === 'batch') {
           const requestIds = new Set<string | number>();
@@ -269,26 +270,40 @@ export class HttpStreamTransport extends AbstractTransport {
           this._pendingBatches.set(res, batchState);
           logger.debug(`Batch mode: Tracking ${requestIds.size} request IDs. Timeout: ${this._config.batchTimeout}ms.`);
 
-          clientRequests.forEach(reqMsg => this.handleIncomingMessage(reqMsg, session?.id));
+          if (newSessionId) {
+              const originalComplete = this.completeBatchResponse.bind(this);
+              this.completeBatchResponse = (state: BatchResponseState) => {
+                  if (state === batchState && !state.res.headersSent) {
+                      state.res.setHeader(this._config.session.headerName, newSessionId);
+                      logger.info(`Adding session ID header to batch response: ${newSessionId}`);
+                  }
+                  originalComplete(state);
+                  this.completeBatchResponse = originalComplete;
+              };
+              logger.info(`Initialized new session: ${newSessionId} for batch response`);
+          }
 
+          clientRequests.forEach(reqMsg => this.handleIncomingMessage(reqMsg, session?.id));
       } else {
-          const sseConnection = this.setupSSEConnection(req, res, session?.id);
-          if (isInitialize && this._config.session.enabled) {
-              const newSessionId = randomUUID();
-              session = { id: newSessionId, createdAt: Date.now(), lastActivity: Date.now() };
-              this._activeSessions.set(newSessionId, session);
-              sseConnection.sessionId = newSessionId;
-              res.setHeader(this._config.session.headerName, newSessionId);
+          const additionalHeaders: Record<string, string> = {};
+          if (newSessionId) {
+              additionalHeaders[this._config.session.headerName] = newSessionId;
               logger.info(`Initialized new session: ${newSessionId} via stream`);
           }
+          
+          const sseConnection = this.setupSSEConnection(req, res, newSessionId || session?.id, undefined, additionalHeaders);
+          
+          if (newSessionId) {
+              sseConnection.sessionId = newSessionId;
+          }
+          
           clientRequests.forEach(reqMsg => {
               this._requestStreamMap.set(reqMsg.id, sseConnection);
-              this.handleIncomingMessage(reqMsg, session?.id);
+              this.handleIncomingMessage(reqMsg, sseConnection.sessionId);
           });
       }
     }
   }
-
 
   private handleBatchTimeout(res: ServerResponse): void {
       const batchState = this._pendingBatches.get(res);
@@ -311,7 +326,6 @@ export class HttpStreamTransport extends AbstractTransport {
           this._pendingBatches.delete(res);
       }
   }
-
 
   private completeBatchResponse(batchState: BatchResponseState): void {
        if (batchState.isCompleted) return;
@@ -345,7 +359,6 @@ export class HttpStreamTransport extends AbstractTransport {
     logger.debug(`Established SSE stream for GET request (Session: ${session?.id || 'N/A'})`);
   }
 
-
   private async handleDelete(req: IncomingMessage, res: ServerResponse): Promise<void> {
     logger.debug(`Handling DELETE request to ${this._config.endpoint}`);
     if (!this._config.session.enabled) throw this.httpError(405, 'Method Not Allowed: Sessions are disabled');
@@ -360,14 +373,16 @@ export class HttpStreamTransport extends AbstractTransport {
     res.writeHead(200, { 'Content-Type': 'text/plain' }).end("Session terminated");
   }
 
-
-  private setupSSEConnection(req: IncomingMessage, res: ServerResponse, sessionId?: string, lastEventId?: string): ActiveSseConnection {
+  private setupSSEConnection(req: IncomingMessage, res: ServerResponse, sessionId?: string, lastEventId?: string, additionalHeaders: Record<string, string> = {}): ActiveSseConnection {
     const streamId = randomUUID();
     const connection: ActiveSseConnection = {
         res, sessionId, streamId, lastEventIdSent: null,
         messageHistory: this._config.resumability.enabled ? [] : undefined, pingInterval: undefined
     };
-    res.writeHead(200, { ...SSE_HEADERS });
+    
+    const headers = { ...SSE_HEADERS, ...additionalHeaders };
+    res.writeHead(200, headers);
+    
     logger.debug(`SSE stream ${streamId} setup (Session: ${sessionId || 'N/A'})`);
     if (res.socket) { res.socket.setNoDelay(true); res.socket.setKeepAlive(true); res.socket.setTimeout(0); logger.debug(`Optimized socket for SSE stream ${streamId}`); }
     else { logger.warn(`Could not access socket for SSE stream ${streamId} to optimize.`); }
@@ -399,7 +414,6 @@ export class HttpStreamTransport extends AbstractTransport {
     logger.debug(`Total active SSE connections after cleanup: ${this._activeSseConnections.size}`);
   }
 
-
   private cleanupAllConnections(): void {
     logger.info(`Cleaning up all ${this._activeSseConnections.size} active SSE connections and ${this._pendingBatches.size} pending batches.`);
     Array.from(this._activeSseConnections).forEach(conn => this.cleanupConnection(conn, "Server shutting down"));
@@ -409,10 +423,8 @@ export class HttpStreamTransport extends AbstractTransport {
     this._activeSessions.clear();
   }
 
-
   async send(message: JsonRpcMessage): Promise<void> { 
     logger.debug(`Attempting to send message: ${JSON.stringify(message)}`);
-
 
     if (isResponse(message) && message.id !== null) {
         for (const [res, batchState] of this._pendingBatches.entries()) {
@@ -464,12 +476,11 @@ export class HttpStreamTransport extends AbstractTransport {
                 const cutoff = timestamp - this._config.resumability.historyDuration;
                 targetConnection.messageHistory = targetConnection.messageHistory.filter(entry => entry.timestamp >= cutoff);
             }
-             logger.debug(`Sending SSE event ID: ${eventId} on stream ${targetConnection.streamId}`);
-             targetConnection.res.write(`id: ${eventId}\n`);
+            logger.debug(`Sending SSE event ID: ${eventId} on stream ${targetConnection.streamId}`);
+            targetConnection.res.write(`id: ${eventId}\n`);
         }
-      logger.debug(`Sending SSE data on stream ${targetConnection.streamId}: ${JSON.stringify(message)}`);
-      targetConnection.res.write(`data: ${JSON.stringify(message)}\n\n`);
-
+        logger.debug(`Sending SSE data on stream ${targetConnection.streamId}: ${JSON.stringify(message)}`);
+        targetConnection.res.write(`data: ${JSON.stringify(message)}\n\n`);
     } catch (error: any) {
       logger.error(`Error writing to SSE stream ${targetConnection.streamId}: ${error.message}. Cleaning up connection.`);
       this.cleanupConnection(targetConnection, `Write error: ${error.message}`);
@@ -487,7 +498,6 @@ export class HttpStreamTransport extends AbstractTransport {
       }
   }
 
-
   private async handleAuthentication(req: IncomingMessage, res: ServerResponse, context: string, session?: SessionData, requestId?: JsonRpcId): Promise<AuthResult | true> {
     const provider = this._config.auth?.provider;
     if (!provider) { logger.debug(`Auth skipped for ${context}: No provider.`); return true; }
@@ -501,11 +511,28 @@ export class HttpStreamTransport extends AbstractTransport {
 
   private validateSession(sessionIdHeader: string | undefined, req: IncomingMessage, isMandatory: boolean, requestId?: JsonRpcId): SessionData {
     if (!this._config.session.enabled) throw this.httpError(500, "Internal Server Error: Session validation called when sessions disabled", -32003, undefined, requestId);
+    
     const headerName = this._config.session.headerName;
-    if (!sessionIdHeader) { if (isMandatory) { logger.warn(`Mandatory session ID missing: ${headerName}`); throw this.httpError(400, `Bad Request: Missing required session header ${headerName}`, -32601, undefined, requestId); } else { logger.warn(`Session ID missing for non-init request: ${headerName}`); throw this.httpError(400, `Bad Request: Session header ${headerName} required`, -32601, undefined, requestId); } }
+    
+    if (!sessionIdHeader) { 
+      if (isMandatory) { 
+        logger.warn(`Mandatory session ID missing: ${headerName}`); 
+        throw this.httpError(400, `Bad Request: Missing required session header ${headerName}`, -32601, undefined, requestId); 
+      } 
+      else { 
+        logger.error(`Programming error: validateSession called for initialization request with isMandatory=false`);
+        throw this.httpError(500, "Internal Server Error: Session validation incorrectly called for initialization", -32603, undefined, requestId);
+      }
+    }
+    
     const session = this._activeSessions.get(sessionIdHeader);
-    if (!session) { logger.warn(`Invalid/expired session ID: ${sessionIdHeader}`); throw this.httpError(404, 'Not Found: Invalid or expired session ID', -32004, undefined, requestId); }
-    logger.debug(`Session ${session.id} validated.`); return session;
+    if (!session) { 
+      logger.warn(`Invalid/expired session ID: ${sessionIdHeader}`); 
+      throw this.httpError(404, 'Not Found: Invalid or expired session ID', -32004, undefined, requestId); 
+    }
+    
+    logger.debug(`Session ${session.id} validated.`); 
+    return session;
   }
 
   private async handleResumption(connection: ActiveSseConnection, lastEventId: string): Promise<void> {
@@ -554,7 +581,6 @@ export class HttpStreamTransport extends AbstractTransport {
       logger.error(`Sync error in _onmessage handler: ${error.message}.`);
     }
   }
-
 
   private httpError(
       statusCode: number, message: string, code: number = -32000,

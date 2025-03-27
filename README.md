@@ -139,6 +139,27 @@ Add this configuration to your Claude Desktop config file:
 2. Run \`npm run build\` to compile
 3. The server will automatically load your tools on startup
 
+## Environment Variables
+
+The framework supports the following environment variables for configuration:
+
+| Variable              | Description                                           | Default     |
+|-----------------------|-------------------------------------------------------|-------------|
+| MCP_ENABLE_FILE_LOGGING | Enable logging to files (true/false)                 | false       |
+| MCP_LOG_DIRECTORY     | Directory where log files will be stored             | logs        |
+| MCP_DEBUG_CONSOLE     | Display debug level messages in console (true/false) | false       |
+
+Example usage:
+
+```bash
+# Enable file logging
+MCP_ENABLE_FILE_LOGGING=true node dist/index.js
+
+# Specify a custom log directory
+MCP_ENABLE_FILE_LOGGING=true MCP_LOG_DIRECTORY=my-logs
+# Enable debug messages in console
+MCP_DEBUG_CONSOLE=true```
+
 ## Quick Start
 
 ### Creating a Tool
@@ -278,7 +299,7 @@ const server = new MCPServer({
     options: {
       port: 8080,                // Optional (default: 8080)
       endpoint: "/mcp",          // Optional (default: "/mcp") 
-      responseMode: "stream",    // Optional (default: "stream"), can be "batch" or "stream"
+      responseMode: "batch",     // Optional (default: "batch"), can be "batch" or "stream"
       batchTimeout: 30000,       // Optional (default: 30000ms) - timeout for batch responses
       maxMessageSize: "4mb",     // Optional (default: "4mb") - maximum message size
       
@@ -299,8 +320,8 @@ const server = new MCPServer({
       cors: {
         allowOrigin: "*",
         allowMethods: "GET, POST, DELETE, OPTIONS",
-        allowHeaders: "Content-Type, Accept, Mcp-Session-Id, Last-Event-ID",
-        exposeHeaders: "Content-Type, Mcp-Session-Id",
+        allowHeaders: "Content-Type, Accept, Authorization, x-api-key, Mcp-Session-Id, Last-Event-ID",
+        exposeHeaders: "Content-Type, Authorization, x-api-key, Mcp-Session-Id",
         maxAge: "86400"
       }
     }
@@ -312,8 +333,33 @@ const server = new MCPServer({
 
 The HTTP Stream transport supports two response modes:
 
-1. **Stream Mode** (Default): All responses are sent over a persistent SSE connection. This is ideal for real-time applications.
-2. **Batch Mode**: Responses are collected and sent as a single JSON-RPC response. This is suitable for traditional REST-like integrations.
+1. **Batch Mode** (Default): Responses are collected and sent as a single JSON-RPC response. This is suitable for typical request-response patterns and is more efficient for most use cases.
+
+2. **Stream Mode**: All responses are sent over a persistent SSE connection opened for each request. This is ideal for long-running operations or when the server needs to send multiple messages in response to a single request.
+
+You can configure the response mode based on your specific needs:
+
+```typescript
+// For batch mode (default):
+const server = new MCPServer({
+  transport: {
+    type: "http-stream",
+    options: {
+      responseMode: "batch"
+    }
+  }
+});
+
+// For stream mode:
+const server = new MCPServer({
+  transport: {
+    type: "http-stream",
+    options: {
+      responseMode: "stream"
+    }
+  }
+});
+```
 
 #### HTTP Stream Transport Features
 

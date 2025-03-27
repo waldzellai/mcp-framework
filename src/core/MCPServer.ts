@@ -423,23 +423,10 @@ export class MCPServer {
       logger.info("Creating transport...");
       this.transport = this.createTransport();
       
-      if (this.transport.type === 'http-stream' || this.transport.type === 'sse') {
-        this.transport.onmessage = this.handleSdkMessage.bind(this);
-        logger.debug(`Assigned onmessage handler to ${this.transport.type} before start.`);
-      }
-      
-      logger.info(`Starting transport (${this.transport.type})...`);
-      await this.transport.start();
-      
-      if (this.transport.type === 'stdio') {
-        this.transport.onmessage = this.handleSdkMessage.bind(this);
-        logger.debug("Assigned onmessage handler to stdio after start.");
-        
-        await this.server.connect(this.transport);
-        logger.info("SDK Server connected via stdio transport.");
-      } else {
-        logger.info(`Transport (${this.transport.type}) started. SDK interaction via handlers.`);
-      }
+      logger.info(`Connecting transport (${this.transport.type}) to SDK Server...`);
+      // Let the SDK handle starting the transport through the connect method
+      await this.server.connect(this.transport);
+      logger.info(`SDK Server connected to ${this.transport.type} transport.`);
 
       logger.info(`Started ${this.serverName}@${this.serverVersion} successfully on transport ${this.transport.type}`);
       
@@ -503,7 +490,7 @@ export class MCPServer {
 
     try {
       const sdkMessage = message as unknown as JSONRPCMessage;
-      const response = await (this.server as any).handleMessage(sdkMessage);
+      const response = await (this.server as any).processMessage(sdkMessage);
 
       if (response) {
         const responses = Array.isArray(response) ? response : [response];
@@ -514,7 +501,7 @@ export class MCPServer {
           await this.transport?.send(resp);
         }
       } else {
-        logger.debug(`[MCPServer] SDK handleMessage processed ${method} ${id} without direct response.`);
+        logger.debug(`[MCPServer] SDK processed ${method} ${id} without direct response.`);
       }
     } catch (error: any) {
       logger.error(`[MCPServer] Error processing message via SDK Server: ${error.message}`);

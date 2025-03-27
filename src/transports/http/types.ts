@@ -53,7 +53,7 @@ export type JsonRpcMessage =
 
 /**
  * Defines how the server responds to POST requests containing JSON-RPC requests.
- * - 'stream': Always opens a text/event-stream (SSE).
+ * - 'stream': Always opens a text/event-stream (SSE) for each request, allowing streaming responses.
  * - 'batch': Collects all responses for the batch and sends a single application/json response.
  */
 export type HttpResponseMode = 'stream' | 'batch';
@@ -81,7 +81,9 @@ export interface HttpStreamTransportConfig {
   maxMessageSize?: string;
   
   /**
-   * Response mode for handling request messages. Default: "stream"
+   * Response mode for handling request messages. Default: "batch"
+   * - 'batch': Returns a single JSON response containing all responses (more efficient)
+   * - 'stream': Opens an SSE stream for each request (better for long operations)
    */
   responseMode?: HttpResponseMode;
   
@@ -159,7 +161,7 @@ export const DEFAULT_HTTP_STREAM_CONFIG: HttpStreamTransportConfigInternal = {
   port: 8080,
   endpoint: "/mcp",
   maxMessageSize: "4mb",
-  responseMode: "stream",
+  responseMode: "batch",
   batchTimeout: 30000,
   session: {
     enabled: true,
@@ -173,8 +175,8 @@ export const DEFAULT_HTTP_STREAM_CONFIG: HttpStreamTransportConfigInternal = {
   cors: {
     allowOrigin: "*",
     allowMethods: "GET, POST, DELETE, OPTIONS",
-    allowHeaders: "Content-Type, Accept, Mcp-Session-Id, Last-Event-ID",
-    exposeHeaders: "Content-Type, Mcp-Session-Id",
+    allowHeaders: "Content-Type, Accept, Authorization, x-api-key, Mcp-Session-Id, Last-Event-ID",
+    exposeHeaders: "Content-Type, Authorization, x-api-key, Mcp-Session-Id",
     maxAge: "86400",
   },
 };
