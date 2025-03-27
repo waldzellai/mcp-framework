@@ -61,7 +61,7 @@ export async function createProject(name?: string) {
         start: "node dist/index.js"
       },
       dependencies: {
-        "mcp-framework": "^0.1.29"
+        "mcp-framework": "^0.2.0"
       },
       devDependencies: {
         "@types/node": "^20.11.24",
