@@ -7,7 +7,7 @@ MCP-Framework gives you architecture out of the box, with automatic directory-ba
 ## Features
 
 - 🛠️ Automatic discovery and loading of tools, resources, and prompts
-- Multiple transport support (stdio, SSE)
+- Multiple transport support (stdio, SSE, HTTP Stream)
 - TypeScript-first development with full type safety
 - Built on the official MCP SDK
 - Easy-to-use base classes for tools, prompts, and resources
@@ -266,6 +266,61 @@ const server = new MCPServer({
   }
 });
 ```
+
+### HTTP Stream Transport (New!)
+
+The HTTP Stream transport provides a streamable JSON-RPC interface over HTTP with support for batch and streaming response modes:
+
+```typescript
+const server = new MCPServer({
+  transport: {
+    type: "http-stream",
+    options: {
+      port: 8080,                // Optional (default: 8080)
+      endpoint: "/mcp",          // Optional (default: "/mcp") 
+      responseMode: "stream",    // Optional (default: "stream"), can be "batch" or "stream"
+      batchTimeout: 30000,       // Optional (default: 30000ms) - timeout for batch responses
+      maxMessageSize: "4mb",     // Optional (default: "4mb") - maximum message size
+      
+      // Session configuration
+      session: {
+        enabled: true,           // Optional (default: true)
+        headerName: "Mcp-Session-Id", // Optional (default: "Mcp-Session-Id")
+        allowClientTermination: true, // Optional (default: true)
+      },
+      
+      // Stream resumability (for missed messages)
+      resumability: {
+        enabled: false,          // Optional (default: false)
+        historyDuration: 300000, // Optional (default: 300000ms = 5min) - how long to keep message history
+      },
+      
+      // CORS configuration (same as SSE transport)
+      cors: {
+        allowOrigin: "*",
+        allowMethods: "GET, POST, DELETE, OPTIONS",
+        allowHeaders: "Content-Type, Accept, Mcp-Session-Id, Last-Event-ID",
+        exposeHeaders: "Content-Type, Mcp-Session-Id",
+        maxAge: "86400"
+      }
+    }
+  }
+});
+```
+
+#### Response Modes
+
+The HTTP Stream transport supports two response modes:
+
+1. **Stream Mode** (Default): All responses are sent over a persistent SSE connection. This is ideal for real-time applications.
+2. **Batch Mode**: Responses are collected and sent as a single JSON-RPC response. This is suitable for traditional REST-like integrations.
+
+#### HTTP Stream Transport Features
+
+- **Session Management**: Automatic session tracking and management
+- **Stream Resumability**: Optional support for resuming streams after connection loss
+- **Batch Processing**: Support for JSON-RPC batch requests/responses
+- **Comprehensive Error Handling**: Detailed error responses with JSON-RPC error codes
 
 ## Authentication
 
