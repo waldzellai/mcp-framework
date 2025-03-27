@@ -5,7 +5,7 @@ import prompts from "prompts";
 import { generateReadme } from "../templates/readme.js";
 import { execa } from "execa";
 
-export async function createProject(name?: string) {
+export async function createProject(name?: string, options?: { http?: boolean, cors?: boolean, port?: number }) {
   let projectName: string;
 
   if (!name) {
@@ -57,10 +57,10 @@ export async function createProject(name?: string) {
       scripts: {
         build: "tsc && mcp-build",
         watch: "tsc --watch",
-        start: "node dist/index.js"
+        start: "npm run build && node dist/index.js"
       },
       dependencies: {
-        "mcp-framework": "^0.2.1"
+        "mcp-framework": "^0.2.2"
       },
       devDependencies: {
         "@types/node": "^20.11.24",
@@ -84,11 +84,38 @@ export async function createProject(name?: string) {
       exclude: ["node_modules"],
     };
 
-    const indexTs = `import { MCPServer } from "mcp-framework";
+    let indexTs = "";
+    
+    if (options?.http) {
+      const port = options.port || 8080;
+      let transportConfig = `\n  transport: {
+    type: "http-stream",
+    options: {
+      port: ${port}`;
+      
+      if (options.cors) {
+        transportConfig += `,
+      cors: {
+        allowOrigin: "*"
+      }`;
+      }
+      
+      transportConfig += `
+    }
+  }`;
+      
+      indexTs = `import { MCPServer } from "mcp-framework";
+
+const server = new MCPServer({${transportConfig}});
+
+server.start();`;
+    } else {
+      indexTs = `import { MCPServer } from "mcp-framework";
 
 const server = new MCPServer();
 
 server.start();`;
+    }
 
     const exampleToolTs = `import { MCPTool } from "mcp-framework";
 import { z } from "zod";
@@ -175,7 +202,7 @@ Project ${projectName} created and built successfully!
 You can now:
 1. cd ${projectName}
 2. Add more tools using:
-   mcp add tool <name>
+   mcp add tool <n>
     `);
   } catch (error) {
     console.error("Error creating project:", error);

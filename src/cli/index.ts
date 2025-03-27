@@ -11,7 +11,7 @@ const program = new Command();
 program
   .name("mcp")
   .description("CLI for managing MCP server projects")
-  .version("0.2.0");
+  .version("0.2.2");
 
 program
   .command("build")
@@ -22,6 +22,9 @@ program
   .command("create")
   .description("Create a new MCP server project")
   .argument("[name]", "project name")
+  .option("--http", "use HTTP transport instead of default stdio")
+  .option("--cors", "enable CORS with wildcard (*) access")
+  .option("--port <number>", "specify HTTP port (only valid with --http)", (val) => parseInt(val, 10))
   .action(createProject);
 
 program
