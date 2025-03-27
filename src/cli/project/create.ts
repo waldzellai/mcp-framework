@@ -56,7 +56,6 @@ export async function createProject(name?: string) {
       files: ["dist"],
       scripts: {
         build: "tsc && mcp-build",
-        prepare: "npm run build",
         watch: "tsc --watch",
         start: "node dist/index.js"
       },
