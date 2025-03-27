@@ -7,7 +7,7 @@ MCP-Framework gives you architecture out of the box, with automatic directory-ba
 ## Features
 
 - 🛠️ Automatic discovery and loading of tools, resources, and prompts
-- Multiple transport support (stdio, SSE)
+- Multiple transport support (stdio, SSE, HTTP Stream)
 - TypeScript-first development with full type safety
 - Built on the official MCP SDK
 - Easy-to-use base classes for tools, prompts, and resources
@@ -139,6 +139,27 @@ Add this configuration to your Claude Desktop config file:
 2. Run \`npm run build\` to compile
 3. The server will automatically load your tools on startup
 
+## Environment Variables
+
+The framework supports the following environment variables for configuration:
+
+| Variable              | Description                                           | Default     |
+|-----------------------|-------------------------------------------------------|-------------|
+| MCP_ENABLE_FILE_LOGGING | Enable logging to files (true/false)                 | false       |
+| MCP_LOG_DIRECTORY     | Directory where log files will be stored             | logs        |
+| MCP_DEBUG_CONSOLE     | Display debug level messages in console (true/false) | false       |
+
+Example usage:
+
+```bash
+# Enable file logging
+MCP_ENABLE_FILE_LOGGING=true node dist/index.js
+
+# Specify a custom log directory
+MCP_ENABLE_FILE_LOGGING=true MCP_LOG_DIRECTORY=my-logs
+# Enable debug messages in console
+MCP_DEBUG_CONSOLE=true```
+
 ## Quick Start
 
 ### Creating a Tool
@@ -266,6 +287,86 @@ const server = new MCPServer({
   }
 });
 ```
+
+### HTTP Stream Transport (New!)
+
+The HTTP Stream transport provides a streamable JSON-RPC interface over HTTP with support for batch and streaming response modes:
+
+```typescript
+const server = new MCPServer({
+  transport: {
+    type: "http-stream",
+    options: {
+      port: 8080,                // Optional (default: 8080)
+      endpoint: "/mcp",          // Optional (default: "/mcp") 
+      responseMode: "batch",     // Optional (default: "batch"), can be "batch" or "stream"
+      batchTimeout: 30000,       // Optional (default: 30000ms) - timeout for batch responses
+      maxMessageSize: "4mb",     // Optional (default: "4mb") - maximum message size
+      
+      // Session configuration
+      session: {
+        enabled: true,           // Optional (default: true)
+        headerName: "Mcp-Session-Id", // Optional (default: "Mcp-Session-Id")
+        allowClientTermination: true, // Optional (default: true)
+      },
+      
+      // Stream resumability (for missed messages)
+      resumability: {
+        enabled: false,          // Optional (default: false)
+        historyDuration: 300000, // Optional (default: 300000ms = 5min) - how long to keep message history
+      },
+      
+      // CORS configuration (same as SSE transport)
+      cors: {
+        allowOrigin: "*",
+        allowMethods: "GET, POST, DELETE, OPTIONS",
+        allowHeaders: "Content-Type, Accept, Authorization, x-api-key, Mcp-Session-Id, Last-Event-ID",
+        exposeHeaders: "Content-Type, Authorization, x-api-key, Mcp-Session-Id",
+        maxAge: "86400"
+      }
+    }
+  }
+});
+```
+
+#### Response Modes
+
+The HTTP Stream transport supports two response modes:
+
+1. **Batch Mode** (Default): Responses are collected and sent as a single JSON-RPC response. This is suitable for typical request-response patterns and is more efficient for most use cases.
+
+2. **Stream Mode**: All responses are sent over a persistent SSE connection opened for each request. This is ideal for long-running operations or when the server needs to send multiple messages in response to a single request.
+
+You can configure the response mode based on your specific needs:
+
+```typescript
+// For batch mode (default):
+const server = new MCPServer({
+  transport: {
+    type: "http-stream",
+    options: {
+      responseMode: "batch"
+    }
+  }
+});
+
+// For stream mode:
+const server = new MCPServer({
+  transport: {
+    type: "http-stream",
+    options: {
+      responseMode: "stream"
+    }
+  }
+});
+```
+
+#### HTTP Stream Transport Features
+
+- **Session Management**: Automatic session tracking and management
+- **Stream Resumability**: Optional support for resuming streams after connection loss
+- **Batch Processing**: Support for JSON-RPC batch requests/responses
+- **Comprehensive Error Handling**: Detailed error responses with JSON-RPC error codes
 
 ## Authentication
 

@@ -1,5 +1,5 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "../transports/stdio/server.js";
+import { JsonRpcMessage, JsonRpcErrorResponse, JsonRpcId } from "../transports/http/types.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -9,6 +9,7 @@ import {
   ReadResourceRequestSchema,
   SubscribeRequestSchema,
   UnsubscribeRequestSchema,
+  JSONRPCMessage,
 } from "@modelcontextprotocol/sdk/types.js";
 import { ToolProtocol } from "../tools/BaseTool.js";
 import { PromptProtocol } from "../prompts/BasePrompt.js";
@@ -20,16 +21,32 @@ import { ToolLoader } from "../loaders/toolLoader.js";
 import { PromptLoader } from "../loaders/promptLoader.js";
 import { ResourceLoader } from "../loaders/resourceLoader.js";
 import { BaseTransport } from "../transports/base.js";
+import { StdioServerTransport } from "../transports/stdio/server.js";
 import { SSEServerTransport } from "../transports/sse/server.js";
 import { SSETransportConfig, DEFAULT_SSE_CONFIG } from "../transports/sse/types.js";
+import { HttpStreamTransport } from "../transports/http/server.js";
+import { HttpStreamTransportConfig, DEFAULT_HTTP_STREAM_CONFIG } from "../transports/http/types.js";
+import { DEFAULT_CORS_CONFIG } from "../transports/sse/types.js";
+import { AuthConfig } from "../auth/types.js";
 
-export type TransportType = "stdio" | "sse";
+function isRequest(msg: any): boolean {
+  return msg && typeof msg.method === 'string' && msg.jsonrpc === "2.0" && 'id' in msg;
+}
+
+function isResponse(msg: any): boolean {
+  return msg && msg.jsonrpc === "2.0" && 'id' in msg && ('result' in msg || 'error' in msg);
+}
+
+function isNotification(msg: any): boolean {
+  return msg && typeof msg.method === 'string' && msg.jsonrpc === "2.0" && !('id' in msg);
+}
+
+export type TransportType = "stdio" | "sse" | "http-stream";
 
 export interface TransportConfig {
   type: TransportType;
-  options?: SSETransportConfig & {
-    auth?: SSETransportConfig['auth'];
-  };
+  options?: SSETransportConfig | HttpStreamTransportConfig;
+  auth?: AuthConfig;
 }
 
 export interface MCPServerConfig {
@@ -79,18 +96,28 @@ export class MCPServer {
     this.serverName = config.name ?? this.getDefaultName();
     this.serverVersion = config.version ?? this.getDefaultVersion();
     this.transportConfig = config.transport ?? { type: "stdio" };
+    
+    if (this.transportConfig.auth && this.transportConfig.options) {
+        (this.transportConfig.options as any).auth = this.transportConfig.auth;
+    } else if (this.transportConfig.auth && !this.transportConfig.options) {
+        this.transportConfig.options = { auth: this.transportConfig.auth } as any;
+    }
 
     logger.info(
       `Initializing MCP Server: ${this.serverName}@${this.serverVersion}`
     );
+    logger.debug(`Base path: ${this.basePath}`);
+    logger.debug(`Transport config: ${JSON.stringify(this.transportConfig)}`);
 
     this.toolLoader = new ToolLoader(this.basePath);
     this.promptLoader = new PromptLoader(this.basePath);
     this.resourceLoader = new ResourceLoader(this.basePath);
 
-    logger.debug(`Looking for tools in: ${join(dirname(this.basePath), 'tools')}`);
-    logger.debug(`Looking for prompts in: ${join(dirname(this.basePath), 'prompts')}`);
-    logger.debug(`Looking for resources in: ${join(dirname(this.basePath), 'resources')}`);
+    this.server = new Server(
+      { name: this.serverName, version: this.serverVersion },
+      { capabilities: this.capabilities }
+    );
+    logger.debug(`SDK Server instance created.`);
   }
 
   private resolveBasePath(configPath?: string): string {
@@ -107,32 +134,63 @@ export class MCPServer {
     logger.debug(`Creating transport: ${this.transportConfig.type}`);
     
     let transport: BaseTransport;
+    const options = this.transportConfig.options || {};
+    const authConfig = this.transportConfig.auth ?? (options as any).auth;
+    
     switch (this.transportConfig.type) {
       case "sse": {
-        const sseConfig = this.transportConfig.options 
-          ? { ...DEFAULT_SSE_CONFIG, ...this.transportConfig.options }
-          : DEFAULT_SSE_CONFIG;
+        const sseConfig: SSETransportConfig = {
+          ...DEFAULT_SSE_CONFIG, 
+          ...(options as SSETransportConfig),
+          cors: { ...DEFAULT_CORS_CONFIG, ...(options as SSETransportConfig).cors }, 
+          auth: authConfig
+        };
         transport = new SSEServerTransport(sseConfig);
         break;
       }
+      case "http-stream": {
+        const httpConfig: HttpStreamTransportConfig = {
+          ...DEFAULT_HTTP_STREAM_CONFIG, 
+          ...(options as HttpStreamTransportConfig),
+          cors: { 
+            ...DEFAULT_CORS_CONFIG, 
+            ...((options as HttpStreamTransportConfig).cors || {})
+          },
+          session: { 
+            ...DEFAULT_HTTP_STREAM_CONFIG.session, 
+            ...((options as HttpStreamTransportConfig).session || {})
+          },
+          resumability: { 
+            ...DEFAULT_HTTP_STREAM_CONFIG.resumability, 
+            ...((options as HttpStreamTransportConfig).resumability || {})
+          },
+          auth: authConfig
+        };
+        logger.debug(`Creating HttpStreamTransport with effective responseMode: ${httpConfig.responseMode}`);
+        transport = new HttpStreamTransport(httpConfig);
+        break;
+      }
       case "stdio":
-        logger.info("Starting stdio transport");
+      default:
+        if (this.transportConfig.type !== "stdio") {
+          logger.warn(`Unsupported type '${this.transportConfig.type}', defaulting to stdio.`);
+        }
         transport = new StdioServerTransport();
         break;
-      default:
-        throw new Error(`Unsupported transport type: ${this.transportConfig.type}`);
     }
 
     transport.onclose = () => {
-      logger.info("Transport connection closed");
-      this.stop().catch(error => {
-        logger.error(`Error during shutdown: ${error}`);
-        process.exit(1);
-      });
+      logger.info(`Transport (${transport.type}) closed.`);
+      if (this.isRunning) {
+        this.stop().catch(error => {
+          logger.error(`Shutdown error after transport close: ${error}`);
+          process.exit(1);
+        });
+      }
     };
 
     transport.onerror = (error) => {
-      logger.error(`Transport error: ${error}`);
+      logger.error(`Transport (${transport.type}) error: ${error.message}\n${error.stack}`);
     };
 
     return transport;
@@ -327,6 +385,9 @@ export class MCPServer {
       logger.debug("Resources capability enabled");
     }
 
+    (this.server as any).updateCapabilities?.(this.capabilities);
+    logger.debug(`Capabilities updated: ${JSON.stringify(this.capabilities)}`);
+    
     return this.capabilities;
   }
 
@@ -335,6 +396,9 @@ export class MCPServer {
       if (this.isRunning) {
         throw new Error("Server is already running");
       }
+      this.isRunning = true;
+
+      logger.info("Starting MCP server...");
 
       const tools = await this.toolLoader.loadTools();
       this.toolsMap = new Map(
@@ -352,163 +416,177 @@ export class MCPServer {
       );
 
       await this.detectCapabilities();
-
-      logger.debug("Creating MCP Server instance");
-      this.server = new Server(
-        {
-          name: this.serverName,
-          version: this.serverVersion,
-        },
-        {
-          capabilities: this.capabilities
-        }
-      );
-
-      logger.debug(`Server created with capabilities: ${JSON.stringify(this.capabilities)}`);
-      this.setupHandlers();
+      logger.info(`Capabilities detected: ${JSON.stringify(this.capabilities)}`);
       
-      logger.info("Starting transport...");
+      this.setupHandlers();
+
+      logger.info("Creating transport...");
       this.transport = this.createTransport();
       
-      const originalTransportSend = this.transport.send.bind(this.transport);
-      this.transport.send = async (message) => {
-        logger.debug(`Transport sending message: ${JSON.stringify(message)}`);
-        return originalTransportSend(message);
-      };
+      logger.info(`Connecting transport (${this.transport.type}) to SDK Server...`);
+      // Let the SDK handle starting the transport through the connect method
+      await this.server.connect(this.transport);
+      logger.info(`SDK Server connected to ${this.transport.type} transport.`);
 
-      this.transport.onmessage = async (message: any) => {
-        logger.debug(`Transport received message: ${JSON.stringify(message)}`);
-        
+      logger.info(`Started ${this.serverName}@${this.serverVersion} successfully on transport ${this.transport.type}`);
+      
+      logger.info(`Tools (${tools.length}): ${tools.map(t => t.name).join(', ') || 'None'}`);
+      if (this.capabilities.prompts) {
+        logger.info(`Prompts (${prompts.length}): ${prompts.map(p => p.name).join(', ') || 'None'}`);
+      }
+      if (this.capabilities.resources) {
+        logger.info(`Resources (${resources.length}): ${resources.map(r => r.uri).join(', ') || 'None'}`);
+      }
+
+      const shutdownHandler = async (signal: string) => {
+        if (!this.isRunning) return;
+        logger.info(`Received ${signal}. Shutting down...`);
         try {
-          if (message.method === 'initialize') {
-            logger.debug('Processing initialize request');
-            
-            await this.transport?.send({
-              jsonrpc: "2.0" as const,
-              id: message.id,
-              result: {
-                protocolVersion: "2024-11-05",
-                capabilities: this.capabilities,
-                serverInfo: {
-                  name: this.serverName,
-                  version: this.serverVersion
-                }
-              }
-            });
-
-            await this.transport?.send({
-              jsonrpc: "2.0" as const,
-              method: "server/ready",
-              params: {}
-            });
-
-            logger.debug('Initialization sequence completed');
-            return;
-          }
-
-          if (message.method === 'tools/list') {
-            logger.debug('Processing tools/list request');
-            const tools = Array.from(this.toolsMap.values()).map(
-              (tool) => tool.toolDefinition
-            );
-            
-            await this.transport?.send({
-              jsonrpc: "2.0" as const,
-              id: message.id,
-              result: {
-                tools,
-                nextCursor: undefined
-              }
-            });
-            return;
-          }
-
-          logger.debug(`Unhandled message method: ${message.method}`);
-        } catch (error) {
-          logger.error(`Error handling message: ${error}`);
-          if ('id' in message) {
-            await this.transport?.send({
-              jsonrpc: "2.0" as const,
-              id: message.id,
-              error: {
-                code: -32000,
-                message: String(error),
-                data: { type: "handler_error" }
-              }
-            });
-          }
+          await this.stop();
+        } catch (e: any) {
+          logger.error(`Shutdown error via ${signal}: ${e.message}`);
+          process.exit(1);
         }
       };
-
-      await this.server.connect(this.transport);
-      logger.info("Transport connected successfully");
-
-      logger.info(`Started ${this.serverName}@${this.serverVersion}`);
-      logger.info(`Transport: ${this.transportConfig.type}`);
-
-      if (tools.length > 0) {
-        logger.info(
-          `Tools (${tools.length}): ${Array.from(this.toolsMap.keys()).join(
-            ", "
-          )}`
-        );
-      }
-      if (prompts.length > 0) {
-        logger.info(
-          `Prompts (${prompts.length}): ${Array.from(
-            this.promptsMap.keys()
-          ).join(", ")}`
-        );
-      }
-      if (resources.length > 0) {
-        logger.info(
-          `Resources (${resources.length}): ${Array.from(
-            this.resourcesMap.keys()
-          ).join(", ")}`
-        );
-      }
-
-      this.isRunning = true;
-
-      process.on('SIGINT', () => {
-        logger.info('Shutting down...');
-        this.stop().catch(error => {
-          logger.error(`Error during shutdown: ${error}`);
-          process.exit(1);
-        });
-      });
+      
+      process.on('SIGINT', () => shutdownHandler('SIGINT'));
+      process.on('SIGTERM', () => shutdownHandler('SIGTERM'));
 
       this.shutdownPromise = new Promise((resolve) => {
         this.shutdownResolve = resolve;
       });
 
-      logger.info("Server running and ready for connections");
+      logger.info("Server running and ready.");
       await this.shutdownPromise;
 
-    } catch (error) {
-      logger.error(`Server initialization error: ${error}`);
+    } catch (error: any) {
+      logger.error(`Server failed to start: ${error.message}\n${error.stack}`);
+      this.isRunning = false;
       throw error;
+    }
+  }
+
+  private async handleSdkMessage(message: JsonRpcMessage): Promise<void> {
+    let method = 'response/notification';
+    let id: JsonRpcId = null;
+    
+    if (isRequest(message) || isNotification(message)) {
+      method = (message as any).method;
+    }
+    if (isRequest(message) || isResponse(message)) {
+      id = (message as any).id;
+    }
+
+    logger.debug(`[MCPServer <- Transport] Received: ${method} ${id}`);
+    logger.debug(`[MCPServer <- Transport] Message Detail: ${JSON.stringify(message)}`);
+
+    if (!this.server) {
+      logger.error("Cannot handle message: SDK Server not initialized.");
+      if (id !== null && id !== undefined) {
+        await this.trySendErrorResponse(id, -32005, "Server not fully initialized");
+      }
+      return;
+    }
+
+    try {
+      const sdkMessage = message as unknown as JSONRPCMessage;
+      const response = await (this.server as any).processMessage(sdkMessage);
+
+      if (response) {
+        const responses = Array.isArray(response) ? response : [response];
+        logger.debug(`[MCPServer -> Transport] Sending ${responses.length} response(s) for ID ${id ?? 'N/A'}`);
+        
+        for (const resp of responses) {
+          logger.debug(`[MCPServer -> Transport] Sending Detail: ${JSON.stringify(resp)}`);
+          await this.transport?.send(resp);
+        }
+      } else {
+        logger.debug(`[MCPServer] SDK processed ${method} ${id} without direct response.`);
+      }
+    } catch (error: any) {
+      logger.error(`[MCPServer] Error processing message via SDK Server: ${error.message}`);
+      logger.debug(error.stack);
+      
+      if (id !== null && id !== undefined) {
+        await this.trySendErrorResponse(id, -32000, `Internal server error: ${error.message}`);
+      }
+    }
+  }
+
+  private async trySendErrorResponse(id: JsonRpcId, code: number, message: string): Promise<void> {
+    if (!this.transport) return;
+    
+    const errorResponse: JsonRpcErrorResponse = {
+      jsonrpc: "2.0",
+      id: id,
+      error: { code, message }
+    };
+    
+    try {
+      logger.debug(`[MCPServer -> Transport] Sending Error Response: ${JSON.stringify(errorResponse)}`);
+      await this.transport.send(errorResponse as unknown as JSONRPCMessage);
+    } catch (sendError: any) {
+      logger.error(`[MCPServer -> Transport] Failed to send error response for ID ${id}: ${sendError.message}`);
     }
   }
 
   async stop() {
     if (!this.isRunning) {
+      logger.debug("Stop called, but server not running.");
       return;
     }
 
     try {
       logger.info("Stopping server...");
-      await this.transport?.close();
-      await this.server?.close();
+      
+      let transportError: Error | null = null;
+      let sdkServerError: Error | null = null;
+      
+      if (this.transport) {
+        try {
+          logger.debug(`Closing transport (${this.transport.type})...`);
+          await this.transport.close();
+          logger.info(`Transport closed.`);
+        } catch (e: any) {
+          transportError = e;
+          logger.error(`Error closing transport: ${e.message}`);
+        }
+        this.transport = undefined;
+      }
+      
+      if (this.server) {
+        try {
+          logger.debug("Closing SDK Server...");
+          await this.server.close();
+          logger.info("SDK Server closed.");
+        } catch (e: any) {
+          sdkServerError = e;
+          logger.error(`Error closing SDK Server: ${e.message}`);
+        }
+      }
+      
       this.isRunning = false;
-      logger.info('Server stopped');
       
-      this.shutdownResolve?.();
+      if (this.shutdownResolve) {
+        this.shutdownResolve();
+        logger.debug("Shutdown promise resolved.");
+      } else {
+        logger.warn("Shutdown resolve function not found.");
+      }
       
-      process.exit(0);
+      if (transportError || sdkServerError) {
+        logger.error("Errors occurred during server stop.");
+        throw new Error(`Server stop failed. TransportError: ${transportError?.message}, SDKServerError: ${sdkServerError?.message}`);
+      }
+      
+      logger.info("MCP server stopped successfully.");
     } catch (error) {
       logger.error(`Error stopping server: ${error}`);
       throw error;
     }
+  }
+
+  get IsRunning(): boolean {
+    return this.isRunning;
   }
 }
