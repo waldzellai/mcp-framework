@@ -57,7 +57,7 @@ export async function createProject(name?: string, options?: { http?: boolean, c
       scripts: {
         build: "tsc && mcp-build",
         watch: "tsc --watch",
-        start: "npm run build && node dist/index.js"
+        start: "node dist/index.js"
       },
       dependencies: {
         "mcp-framework": "^0.2.2"
