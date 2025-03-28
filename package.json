@@ -1,6 +1,6 @@
 {
   "name": "mcp-framework",
-  "version": "0.2.2",
+  "version": "0.2.3-beta.3",
 
   "description": "Framework for building Model Context Protocol (MCP) servers in Typescript",
   "type": "module",
@@ -25,7 +25,7 @@
     "watch": "tsc --watch"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=18.19.0"
   },
   "keywords": [
     "mcp",

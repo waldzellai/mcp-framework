@@ -49,7 +49,7 @@ mcp create <your project name here>
 
 # Create a new project with the new EXPERIMENTAL HTTP transport
 Heads up: This will set cors allowed origin to "*", modify it in the index if you wish
-mcp create <your project name here> --http --port 3000 --cors
+mcp create <your project name here> --http --port 1337 --cors
 ```
 
 # Options:

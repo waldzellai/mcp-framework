@@ -66,6 +66,9 @@ export async function createProject(name?: string, options?: { http?: boolean, c
         "@types/node": "^20.11.24",
         "typescript": "^5.3.3"
       },
+      engines: {
+        "node": ">=18.19.0"
+      }
     };
 
     const tsconfig = {
