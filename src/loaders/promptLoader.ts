@@ -28,7 +28,7 @@ export class PromptLoader {
       logger.debug(`Prompts directory has valid files: ${hasValidFiles}`);
       return hasValidFiles;
     } catch (error) {
-      logger.debug("No prompts directory found");
+      logger.debug(`No prompts directory found: ${(error as Error).message}`);
       return false;
     }
   }
@@ -74,7 +74,7 @@ export class PromptLoader {
       try {
         stats = await fs.stat(this.PROMPTS_DIR);
       } catch (error) {
-        logger.debug("No prompts directory found");
+        logger.debug(`No prompts directory found: ${(error as Error).message}`);
         return [];
       }
 
@@ -110,7 +110,7 @@ export class PromptLoader {
             prompts.push(prompt);
           }
         } catch (error) {
-          logger.error(`Error loading prompt ${file}: ${error}`);
+          logger.error(`Error loading prompt ${file}: ${(error as Error).message}`);
         }
       }
 
@@ -121,7 +121,7 @@ export class PromptLoader {
       );
       return prompts;
     } catch (error) {
-      logger.error(`Failed to load prompts: ${error}`);
+      logger.error(`Failed to load prompts: ${(error as Error).message}`);
       return [];
     }
   }

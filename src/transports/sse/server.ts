@@ -293,7 +293,7 @@ export class SSEServerTransport extends AbstractTransport {
         return parsed
       })()
 
-      const { id, method, params } = rawMessage as any
+      const { id, method, params } = rawMessage
       logger.debug(`Parsed message - ID: ${id}, Method: ${method}`)
 
       const rpcMessage: JSONRPCMessage = {

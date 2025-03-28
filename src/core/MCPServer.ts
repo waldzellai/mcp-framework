@@ -15,7 +15,7 @@ import { ToolProtocol } from "../tools/BaseTool.js";
 import { PromptProtocol } from "../prompts/BasePrompt.js";
 import { ResourceProtocol } from "../resources/BaseResource.js";
 import { readFileSync } from "fs";
-import { join, dirname, resolve } from "path";
+import { join } from "path";
 import { logger } from "./Logger.js";
 import { ToolLoader } from "../loaders/toolLoader.js";
 import { PromptLoader } from "../loaders/promptLoader.js";
@@ -188,11 +188,10 @@ export class MCPServer {
         });
       }
     };
-// Removed misplaced semicolon from previous line
 
-transport.onerror = (error: Error) => {
-  logger.error(`Transport (${transport.type}) error: ${error.message}\n${error.stack}`);
-};
+    transport.onerror = (error: Error) => {
+      logger.error(`Transport (${transport.type}) error: ${error.message}\n${error.stack}`);
+    };
     return transport;
   }
 

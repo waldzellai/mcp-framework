@@ -32,7 +32,7 @@ export class ResourceLoader {
       logger.debug(`Resources directory has valid files: ${hasValidFiles}`);
       return hasValidFiles;
     } catch (error) {
-      logger.debug("No resources directory found");
+      logger.debug(`No resources directory found: ${(error as Error).message}`);
       return false;
     }
   }
@@ -79,7 +79,7 @@ export class ResourceLoader {
       try {
         stats = await fs.stat(this.RESOURCES_DIR);
       } catch (error) {
-        logger.debug("No resources directory found");
+        logger.debug(`No resources directory found: ${(error as Error).message}`);
         return [];
       }
 
@@ -115,7 +115,7 @@ export class ResourceLoader {
             resources.push(resource);
           }
         } catch (error) {
-          logger.error(`Error loading resource ${file}: ${error}`);
+          logger.error(`Error loading resource ${file}: ${(error as Error).message}`);
         }
       }
 
@@ -126,7 +126,7 @@ export class ResourceLoader {
       );
       return resources;
     } catch (error) {
-      logger.error(`Failed to load resources: ${error}`);
+      logger.error(`Failed to load resources: ${(error as Error).message}`);
       return [];
     }
   }
