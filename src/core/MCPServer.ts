@@ -28,6 +28,9 @@ import { HttpStreamTransport } from "../transports/http/server.js";
 import { HttpStreamTransportConfig, DEFAULT_HTTP_STREAM_CONFIG } from "../transports/http/types.js";
 import { DEFAULT_CORS_CONFIG } from "../transports/sse/types.js";
 import { AuthConfig } from "../auth/types.js";
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
 
 function isRequest(msg: any): boolean {
   return msg && typeof msg.method === 'string' && msg.jsonrpc === "2.0" && 'id' in msg;
@@ -219,7 +222,6 @@ export class MCPServer {
   private getDefaultName(): string {
     const packageJson = this.readPackageJson();
     if (packageJson?.name) {
-      logger.info(`Using name from package.json: ${packageJson.name}`);
       return packageJson.name;
     }
     logger.error("Couldn't find project name in package json");
@@ -229,7 +231,6 @@ export class MCPServer {
   private getDefaultVersion(): string {
     const packageJson = this.readPackageJson();
     if (packageJson?.version) {
-      logger.info(`Using version from package.json: ${packageJson.version}`);
       return packageJson.version;
     }
     return "0.0.0";
@@ -391,6 +392,31 @@ export class MCPServer {
     return this.capabilities;
   }
 
+  private getSdkVersion(): string {
+    try {
+      const sdkSpecificFile = require.resolve("@modelcontextprotocol/sdk/server/index.js");
+
+      const sdkRootDir = resolve(dirname(sdkSpecificFile), '..', '..', '..');
+
+      const correctPackageJsonPath = join(sdkRootDir, "package.json");
+
+      const packageContent = readFileSync(correctPackageJsonPath, "utf-8");
+
+      const packageJson = JSON.parse(packageContent);
+
+      if (packageJson?.version) {
+        logger.debug(`Found SDK version: ${packageJson.version}`);
+        return packageJson.version;
+      } else {
+        logger.warn("Could not determine SDK version from its package.json.");
+        return "unknown";
+      }
+    } catch (error: any) {
+      logger.warn(`Failed to read SDK package.json: ${error.message}`);
+      return "unknown";
+    }
+  }
+
   async start() {
     try {
       if (this.isRunning) {
@@ -398,7 +424,8 @@ export class MCPServer {
       }
       this.isRunning = true;
 
-      logger.info("Starting MCP server...");
+      const sdkVersion = this.getSdkVersion();
+      logger.info(`Starting MCP server with SDK ${sdkVersion}...`);
 
       const tools = await this.toolLoader.loadTools();
       this.toolsMap = new Map(
@@ -420,13 +447,10 @@ export class MCPServer {
       
       this.setupHandlers();
 
-      logger.info("Creating transport...");
       this.transport = this.createTransport();
       
       logger.info(`Connecting transport (${this.transport.type}) to SDK Server...`);
-      // Let the SDK handle starting the transport through the connect method
       await this.server.connect(this.transport);
-      logger.info(`SDK Server connected to ${this.transport.type} transport.`);
 
       logger.info(`Started ${this.serverName}@${this.serverVersion} successfully on transport ${this.transport.type}`);
       
@@ -466,69 +490,8 @@ export class MCPServer {
     }
   }
 
-  private async handleSdkMessage(message: JsonRpcMessage): Promise<void> {
-    let method = 'response/notification';
-    let id: JsonRpcId = null;
-    
-    if (isRequest(message) || isNotification(message)) {
-      method = (message as any).method;
-    }
-    if (isRequest(message) || isResponse(message)) {
-      id = (message as any).id;
-    }
 
-    logger.debug(`[MCPServer <- Transport] Received: ${method} ${id}`);
-    logger.debug(`[MCPServer <- Transport] Message Detail: ${JSON.stringify(message)}`);
 
-    if (!this.server) {
-      logger.error("Cannot handle message: SDK Server not initialized.");
-      if (id !== null && id !== undefined) {
-        await this.trySendErrorResponse(id, -32005, "Server not fully initialized");
-      }
-      return;
-    }
-
-    try {
-      const sdkMessage = message as unknown as JSONRPCMessage;
-      const response = await (this.server as any).processMessage(sdkMessage);
-
-      if (response) {
-        const responses = Array.isArray(response) ? response : [response];
-        logger.debug(`[MCPServer -> Transport] Sending ${responses.length} response(s) for ID ${id ?? 'N/A'}`);
-        
-        for (const resp of responses) {
-          logger.debug(`[MCPServer -> Transport] Sending Detail: ${JSON.stringify(resp)}`);
-          await this.transport?.send(resp);
-        }
-      } else {
-        logger.debug(`[MCPServer] SDK processed ${method} ${id} without direct response.`);
-      }
-    } catch (error: any) {
-      logger.error(`[MCPServer] Error processing message via SDK Server: ${error.message}`);
-      logger.debug(error.stack);
-      
-      if (id !== null && id !== undefined) {
-        await this.trySendErrorResponse(id, -32000, `Internal server error: ${error.message}`);
-      }
-    }
-  }
-
-  private async trySendErrorResponse(id: JsonRpcId, code: number, message: string): Promise<void> {
-    if (!this.transport) return;
-    
-    const errorResponse: JsonRpcErrorResponse = {
-      jsonrpc: "2.0",
-      id: id,
-      error: { code, message }
-    };
-    
-    try {
-      logger.debug(`[MCPServer -> Transport] Sending Error Response: ${JSON.stringify(errorResponse)}`);
-      await this.transport.send(errorResponse as unknown as JSONRPCMessage);
-    } catch (sendError: any) {
-      logger.error(`[MCPServer -> Transport] Failed to send error response for ID ${id}: ${sendError.message}`);
-    }
-  }
 
   async stop() {
     if (!this.isRunning) {

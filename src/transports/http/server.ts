@@ -354,17 +354,14 @@ export class HttpStreamTransport extends AbstractTransport {
     let session: SessionData | undefined;
     
     if (this._config.session.enabled && sessionIdHeader) {
-      // If a session ID is provided, validate it
       session = this.validateSession(sessionIdHeader, req, false);
       session.lastActivity = Date.now();
       logger.debug(`Found valid session: ${session.id}`);
       await this.handleAuthentication(req, res, `GET session ${session.id}`, session);
     } else if (this._config.session.enabled) {
-      // Allow initial GET requests without session ID during initialization phase
       logger.debug(`GET request without session ID - allowing as potential initialization connection`);
       await this.handleAuthentication(req, res, `GET initialization`, undefined);
     } else {
-      // Sessions disabled
       await this.handleAuthentication(req, res, `GET (sessions disabled)`, undefined);
     }
     
@@ -538,9 +535,8 @@ export class HttpStreamTransport extends AbstractTransport {
         throw this.httpError(400, `Bad Request: Missing required session header ${headerName}`, -32601, undefined, requestId); 
       } 
       else { 
-        // This is a valid case for initialization or when sessionId is optional
         logger.debug(`No session ID provided and not mandatory - acceptable for initialization`);
-        return undefined as any; // Will be caught by typescript at call site
+        return undefined as any; 
       }
     }
     
