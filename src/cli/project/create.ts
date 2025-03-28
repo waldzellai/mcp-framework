@@ -5,7 +5,7 @@ import prompts from "prompts";
 import { generateReadme } from "../templates/readme.js";
 import { execa } from "execa";
 
-export async function createProject(name?: string) {
+export async function createProject(name?: string, options?: { http?: boolean, cors?: boolean, port?: number }) {
   let projectName: string;
 
   if (!name) {
@@ -55,17 +55,20 @@ export async function createProject(name?: string) {
       },
       files: ["dist"],
       scripts: {
-        build: "mcp-build",
-        prepare: "npm run build",
+        build: "tsc && mcp-build",
         watch: "tsc --watch",
+        start: "node dist/index.js"
       },
       dependencies: {
-        "mcp-framework": "^0.1.8",
+        "mcp-framework": "^0.2.2"
       },
       devDependencies: {
         "@types/node": "^20.11.24",
-        typescript: "^5.3.3",
+        "typescript": "^5.3.3"
       },
+      engines: {
+        "node": ">=18.19.0"
+      }
     };
 
     const tsconfig = {
@@ -84,14 +87,38 @@ export async function createProject(name?: string) {
       exclude: ["node_modules"],
     };
 
-    const indexTs = `import { MCPServer } from "mcp-framework";
+    let indexTs = "";
+    
+    if (options?.http) {
+      const port = options.port || 8080;
+      let transportConfig = `\n  transport: {
+    type: "http-stream",
+    options: {
+      port: ${port}`;
+      
+      if (options.cors) {
+        transportConfig += `,
+      cors: {
+        allowOrigin: "*"
+      }`;
+      }
+      
+      transportConfig += `
+    }
+  }`;
+      
+      indexTs = `import { MCPServer } from "mcp-framework";
+
+const server = new MCPServer({${transportConfig}});
+
+server.start();`;
+    } else {
+      indexTs = `import { MCPServer } from "mcp-framework";
 
 const server = new MCPServer();
 
-server.start().catch((error) => {
-  console.error("Server error:", error);
-  process.exit(1);
-});`;
+server.start();`;
+    }
 
     const exampleToolTs = `import { MCPTool } from "mcp-framework";
 import { z } from "zod";
@@ -142,14 +169,14 @@ export default ExampleTool;`;
     console.log("Installing dependencies...");
     const npmInstall = spawnSync("npm", ["install"], {
       stdio: "inherit",
-      shell: true,
+      shell: true
     });
 
     if (npmInstall.status !== 0) {
       throw new Error("Failed to install dependencies");
     }
 
-    console.log("Building TypeScript...");
+    console.log("Building project...");
     const tscBuild = await execa('npx', ['tsc'], {
       cwd: projectDir,
       stdio: "inherit",
@@ -159,18 +186,17 @@ export default ExampleTool;`;
       throw new Error("Failed to build TypeScript");
     }
 
-    console.log("Adding shebang...");
-    const mcpBuild = spawnSync("npm", ["run", "build"], {
+    const mcpBuild = await execa('npx', ['mcp-build'], {
+      cwd: projectDir,
       stdio: "inherit",
-      shell: true,
       env: {
         ...process.env,
-        FORCE_COLOR: "1"
+        MCP_SKIP_VALIDATION: "true"
       }
     });
 
-    if (mcpBuild.status !== 0) {
-      throw new Error("Failed to add shebang");
+    if (mcpBuild.exitCode !== 0) {
+      throw new Error("Failed to run mcp-build");
     }
 
     console.log(`
@@ -179,7 +205,7 @@ Project ${projectName} created and built successfully!
 You can now:
 1. cd ${projectName}
 2. Add more tools using:
-   mcp add tool <name>
+   mcp add tool <n>
     `);
   } catch (error) {
     console.error("Error creating project:", error);

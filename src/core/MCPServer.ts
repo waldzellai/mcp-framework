@@ -1,5 +1,5 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { JsonRpcMessage, JsonRpcErrorResponse, JsonRpcId } from "../transports/http/types.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -9,40 +9,72 @@ import {
   ReadResourceRequestSchema,
   SubscribeRequestSchema,
   UnsubscribeRequestSchema,
+  JSONRPCMessage,
 } from "@modelcontextprotocol/sdk/types.js";
 import { ToolProtocol } from "../tools/BaseTool.js";
 import { PromptProtocol } from "../prompts/BasePrompt.js";
 import { ResourceProtocol } from "../resources/BaseResource.js";
 import { readFileSync } from "fs";
-import { join, dirname } from "path";
+import { join, dirname, resolve } from "path";
 import { logger } from "./Logger.js";
 import { ToolLoader } from "../loaders/toolLoader.js";
 import { PromptLoader } from "../loaders/promptLoader.js";
 import { ResourceLoader } from "../loaders/resourceLoader.js";
+import { BaseTransport } from "../transports/base.js";
+import { StdioServerTransport } from "../transports/stdio/server.js";
+import { SSEServerTransport } from "../transports/sse/server.js";
+import { SSETransportConfig, DEFAULT_SSE_CONFIG } from "../transports/sse/types.js";
+import { HttpStreamTransport } from "../transports/http/server.js";
+import { HttpStreamTransportConfig, DEFAULT_HTTP_STREAM_CONFIG } from "../transports/http/types.js";
+import { DEFAULT_CORS_CONFIG } from "../transports/sse/types.js";
+import { AuthConfig } from "../auth/types.js";
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
+
+function isRequest(msg: any): boolean {
+  return msg && typeof msg.method === 'string' && msg.jsonrpc === "2.0" && 'id' in msg;
+}
+
+function isResponse(msg: any): boolean {
+  return msg && msg.jsonrpc === "2.0" && 'id' in msg && ('result' in msg || 'error' in msg);
+}
+
+function isNotification(msg: any): boolean {
+  return msg && typeof msg.method === 'string' && msg.jsonrpc === "2.0" && !('id' in msg);
+}
+
+export type TransportType = "stdio" | "sse" | "http-stream";
+
+export interface TransportConfig {
+  type: TransportType;
+  options?: SSETransportConfig | HttpStreamTransportConfig;
+  auth?: AuthConfig;
+}
 
 export interface MCPServerConfig {
   name?: string;
   version?: string;
   basePath?: string;
+  transport?: TransportConfig;
 }
 
 export type ServerCapabilities = {
   tools?: {
-    enabled: true;
-  };
-  schemas?: {
-    enabled: true;
+    listChanged?: true; // Optional: Indicates support for list change notifications
   };
   prompts?: {
-    enabled: true;
+    listChanged?: true; // Optional: Indicates support for list change notifications
   };
   resources?: {
-    enabled: true;
+    listChanged?: true; // Optional: Indicates support for list change notifications
+    subscribe?: true;   // Optional: Indicates support for resource subscriptions
   };
+  // Other standard capabilities like 'logging' or 'completion' could be added here if supported
 };
 
 export class MCPServer {
-  private server: Server;
+  private server!: Server;
   private toolsMap: Map<string, ToolProtocol> = new Map();
   private promptsMap: Map<string, PromptProtocol> = new Map();
   private resourcesMap: Map<string, ResourceProtocol> = new Map();
@@ -52,35 +84,40 @@ export class MCPServer {
   private serverName: string;
   private serverVersion: string;
   private basePath: string;
+  private transportConfig: TransportConfig;
+  private capabilities: ServerCapabilities = {}; // Initialize as empty
+  private isRunning: boolean = false;
+  private transport?: BaseTransport;
+  private shutdownPromise?: Promise<void>;
+  private shutdownResolve?: () => void;
 
   constructor(config: MCPServerConfig = {}) {
     this.basePath = this.resolveBasePath(config.basePath);
     this.serverName = config.name ?? this.getDefaultName();
     this.serverVersion = config.version ?? this.getDefaultVersion();
+    this.transportConfig = config.transport ?? { type: "stdio" };
+    
+    if (this.transportConfig.auth && this.transportConfig.options) {
+        (this.transportConfig.options as any).auth = this.transportConfig.auth;
+    } else if (this.transportConfig.auth && !this.transportConfig.options) {
+        this.transportConfig.options = { auth: this.transportConfig.auth } as any;
+    }
 
     logger.info(
       `Initializing MCP Server: ${this.serverName}@${this.serverVersion}`
     );
+    logger.debug(`Base path: ${this.basePath}`);
+    logger.debug(`Transport config: ${JSON.stringify(this.transportConfig)}`);
 
     this.toolLoader = new ToolLoader(this.basePath);
     this.promptLoader = new PromptLoader(this.basePath);
     this.resourceLoader = new ResourceLoader(this.basePath);
 
     this.server = new Server(
-      {
-        name: this.serverName,
-        version: this.serverVersion,
-      },
-      {
-        capabilities: {
-          tools: { enabled: true },
-          prompts: { enabled: false },
-          resources: { enabled: false },
-        },
-      }
+      { name: this.serverName, version: this.serverVersion },
+      { capabilities: this.capabilities }
     );
-
-    this.setupHandlers();
+    logger.debug(`SDK Server instance created.`);
   }
 
   private resolveBasePath(configPath?: string): string {
@@ -93,13 +130,86 @@ export class MCPServer {
     return process.cwd();
   }
 
+  private createTransport(): BaseTransport {
+    logger.debug(`Creating transport: ${this.transportConfig.type}`);
+    
+    let transport: BaseTransport;
+    const options = this.transportConfig.options || {};
+    const authConfig = this.transportConfig.auth ?? (options as any).auth;
+    
+    switch (this.transportConfig.type) {
+      case "sse": {
+        const sseConfig: SSETransportConfig = {
+          ...DEFAULT_SSE_CONFIG, 
+          ...(options as SSETransportConfig),
+          cors: { ...DEFAULT_CORS_CONFIG, ...(options as SSETransportConfig).cors }, 
+          auth: authConfig
+        };
+        transport = new SSEServerTransport(sseConfig);
+        break;
+      }
+      case "http-stream": {
+        const httpConfig: HttpStreamTransportConfig = {
+          ...DEFAULT_HTTP_STREAM_CONFIG, 
+          ...(options as HttpStreamTransportConfig),
+          cors: { 
+            ...DEFAULT_CORS_CONFIG, 
+            ...((options as HttpStreamTransportConfig).cors || {})
+          },
+          session: { 
+            ...DEFAULT_HTTP_STREAM_CONFIG.session, 
+            ...((options as HttpStreamTransportConfig).session || {})
+          },
+          resumability: { 
+            ...DEFAULT_HTTP_STREAM_CONFIG.resumability, 
+            ...((options as HttpStreamTransportConfig).resumability || {})
+          },
+          auth: authConfig
+        };
+        logger.debug(`Creating HttpStreamTransport with effective responseMode: ${httpConfig.responseMode}`);
+        transport = new HttpStreamTransport(httpConfig);
+        break;
+      }
+      case "stdio":
+      default:
+        if (this.transportConfig.type !== "stdio") {
+          logger.warn(`Unsupported type '${this.transportConfig.type}', defaulting to stdio.`);
+        }
+        transport = new StdioServerTransport();
+        break;
+    }
+
+    transport.onclose = () => {
+      logger.info(`Transport (${transport.type}) closed.`);
+      if (this.isRunning) {
+        this.stop().catch(error => {
+          logger.error(`Shutdown error after transport close: ${error}`);
+          process.exit(1);
+        });
+      }
+    };
+// Removed misplaced semicolon from previous line
+
+transport.onerror = (error: Error) => {
+  logger.error(`Transport (${transport.type}) error: ${error.message}\n${error.stack}`);
+};
+    return transport;
+  }
+
   private readPackageJson(): any {
     try {
-      const packagePath = join(dirname(this.basePath), "package.json");
-      const packageContent = readFileSync(packagePath, "utf-8");
-      const packageJson = JSON.parse(packageContent);
-      logger.debug(`Successfully read package.json from: ${packagePath}`);
-      return packageJson;
+      const projectRoot = process.cwd();
+      const packagePath = join(projectRoot, "package.json");
+      
+      try {
+        const packageContent = readFileSync(packagePath, "utf-8");
+        const packageJson = JSON.parse(packageContent);
+        logger.debug(`Successfully read package.json from project root: ${packagePath}`);
+        return packageJson;
+      } catch (error) {
+        logger.warn(`Could not read package.json from project root: ${error}`);
+        return null;
+      }
     } catch (error) {
       logger.warn(`Could not read package.json: ${error}`);
       return null;
@@ -109,157 +219,219 @@ export class MCPServer {
   private getDefaultName(): string {
     const packageJson = this.readPackageJson();
     if (packageJson?.name) {
-      logger.info(`Using name from package.json: ${packageJson.name}`);
       return packageJson.name;
     }
+    logger.error("Couldn't find project name in package json");
     return "unnamed-mcp-server";
   }
 
   private getDefaultVersion(): string {
     const packageJson = this.readPackageJson();
     if (packageJson?.version) {
-      logger.info(`Using version from package.json: ${packageJson.version}`);
       return packageJson.version;
     }
     return "0.0.0";
   }
 
   private setupHandlers() {
-    this.server.setRequestHandler(ListToolsRequestSchema, async () => {
-      return {
-        tools: Array.from(this.toolsMap.values()).map(
-          (tool) => tool.toolDefinition
-        ),
+    // TODO: Replace 'any' with the specific inferred request type from the SDK schema if available
+    this.server.setRequestHandler(ListToolsRequestSchema, async (request: any) => {
+      logger.debug(`Received ListTools request: ${JSON.stringify(request)}`);
+
+      const tools = Array.from(this.toolsMap.values()).map(
+        (tool) => tool.toolDefinition
+      );
+
+      logger.debug(`Found ${tools.length} tools to return`);
+      logger.debug(`Tool definitions: ${JSON.stringify(tools)}`);
+
+      const response = {
+        tools: tools,
+        nextCursor: undefined
       };
+
+      logger.debug(`Sending ListTools response: ${JSON.stringify(response)}`);
+      return response;
     });
 
-    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    // TODO: Replace 'any' with the specific inferred request type from the SDK schema if available
+    this.server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
+      logger.debug(`Tool call request received for: ${request.params.name}`);
+      logger.debug(`Tool call arguments: ${JSON.stringify(request.params.arguments)}`);
+
       const tool = this.toolsMap.get(request.params.name);
       if (!tool) {
-        throw new Error(
-          `Unknown tool: ${request.params.name}. Available tools: ${Array.from(
-            this.toolsMap.keys()
-          ).join(", ")}`
-        );
+        const availableTools = Array.from(this.toolsMap.keys());
+        const errorMsg = `Unknown tool: ${request.params.name}. Available tools: ${availableTools.join(", ")}`;
+        logger.error(errorMsg);
+        throw new Error(errorMsg);
       }
 
-      const toolRequest = {
-        params: request.params,
-        method: "tools/call" as const,
-      };
+      try {
+        logger.debug(`Executing tool: ${tool.name}`);
+        const toolRequest = {
+          params: request.params,
+          method: "tools/call" as const,
+        };
 
-      return tool.toolCall(toolRequest);
-    });
-
-    this.server.setRequestHandler(ListPromptsRequestSchema, async () => {
-      return {
-        prompts: Array.from(this.promptsMap.values()).map(
-          (prompt) => prompt.promptDefinition
-        ),
-      };
-    });
-
-    this.server.setRequestHandler(GetPromptRequestSchema, async (request) => {
-      const prompt = this.promptsMap.get(request.params.name);
-      if (!prompt) {
-        throw new Error(
-          `Unknown prompt: ${
-            request.params.name
-          }. Available prompts: ${Array.from(this.promptsMap.keys()).join(
-            ", "
-          )}`
-        );
+        const result = await tool.toolCall(toolRequest);
+        logger.debug(`Tool execution successful: ${JSON.stringify(result)}`);
+        return result;
+      } catch (error) {
+        const errorMsg = `Tool execution failed: ${error}`;
+        logger.error(errorMsg);
+        throw new Error(errorMsg);
       }
-
-      return {
-        messages: await prompt.getMessages(request.params.arguments),
-      };
     });
 
-    this.server.setRequestHandler(ListResourcesRequestSchema, async () => {
-      return {
-        resources: Array.from(this.resourcesMap.values()).map(
-          (resource) => resource.resourceDefinition
-        ),
-      };
-    });
+    if (this.capabilities.prompts) {
+      // No request parameter for ListPrompts
+      this.server.setRequestHandler(ListPromptsRequestSchema, async () => {
+        return {
+          prompts: Array.from(this.promptsMap.values()).map(
+            (prompt) => prompt.promptDefinition
+          ),
+        };
+      });
 
-    this.server.setRequestHandler(
-      ReadResourceRequestSchema,
-      async (request) => {
-        const resource = this.resourcesMap.get(request.params.uri);
-        if (!resource) {
+      // TODO: Replace 'any' with the specific inferred request type from the SDK schema if available
+      this.server.setRequestHandler(GetPromptRequestSchema, async (request: any) => {
+        const prompt = this.promptsMap.get(request.params.name);
+        if (!prompt) {
           throw new Error(
-            `Unknown resource: ${
-              request.params.uri
-            }. Available resources: ${Array.from(this.resourcesMap.keys()).join(
+            `Unknown prompt: ${
+              request.params.name
+            }. Available prompts: ${Array.from(this.promptsMap.keys()).join(
               ", "
             )}`
           );
         }
 
         return {
-          contents: await resource.read(),
+          messages: await prompt.getMessages(request.params.arguments),
         };
-      }
-    );
+      });
+    }
 
-    this.server.setRequestHandler(SubscribeRequestSchema, async (request) => {
-      const resource = this.resourcesMap.get(request.params.uri);
-      if (!resource) {
-        throw new Error(`Unknown resource: ${request.params.uri}`);
-      }
+    if (this.capabilities.resources) {
+      // No request parameter for ListResources
+      this.server.setRequestHandler(ListResourcesRequestSchema, async () => {
+        return {
+          resources: Array.from(this.resourcesMap.values()).map(
+            (resource) => resource.resourceDefinition
+          ),
+        };
+      });
 
-      if (!resource.subscribe) {
-        throw new Error(
-          `Resource ${request.params.uri} does not support subscriptions`
-        );
-      }
+      // TODO: Replace 'any' with the specific inferred request type from the SDK schema if available
+      this.server.setRequestHandler(
+        ReadResourceRequestSchema,
+        async (request: any) => {
+          const resource = this.resourcesMap.get(request.params.uri);
+          if (!resource) {
+            throw new Error(
+              `Unknown resource: ${
+                request.params.uri
+              }. Available resources: ${Array.from(this.resourcesMap.keys()).join(
+                ", "
+              )}`
+            );
+          }
 
-      await resource.subscribe();
-      return {};
-    });
+          return {
+            contents: await resource.read(),
+          };
+        }
+      );
 
-    this.server.setRequestHandler(UnsubscribeRequestSchema, async (request) => {
-      const resource = this.resourcesMap.get(request.params.uri);
-      if (!resource) {
-        throw new Error(`Unknown resource: ${request.params.uri}`);
-      }
+      // TODO: Replace 'any' with the specific inferred request type from the SDK schema if available
+      this.server.setRequestHandler(SubscribeRequestSchema, async (request: any) => {
+        const resource = this.resourcesMap.get(request.params.uri);
+        if (!resource) {
+          throw new Error(`Unknown resource: ${request.params.uri}`);
+        }
 
-      if (!resource.unsubscribe) {
-        throw new Error(
-          `Resource ${request.params.uri} does not support subscriptions`
-        );
-      }
+        if (!resource.subscribe) {
+          throw new Error(
+            `Resource ${request.params.uri} does not support subscriptions`
+          );
+        }
 
-      await resource.unsubscribe();
-      return {};
-    });
+        await resource.subscribe();
+        return {};
+      });
+
+      // TODO: Replace 'any' with the specific inferred request type from the SDK schema if available
+      this.server.setRequestHandler(UnsubscribeRequestSchema, async (request: any) => {
+        const resource = this.resourcesMap.get(request.params.uri);
+        if (!resource) {
+          throw new Error(`Unknown resource: ${request.params.uri}`);
+        }
+
+        if (!resource.unsubscribe) {
+          throw new Error(
+            `Resource ${request.params.uri} does not support subscriptions`
+          );
+        }
+
+        await resource.unsubscribe();
+        return {};
+      });
+    }
   }
 
   private async detectCapabilities(): Promise<ServerCapabilities> {
-    const capabilities: ServerCapabilities = {};
-
-    if (await this.toolLoader.hasTools()) {
-      capabilities.tools = { enabled: true };
-      logger.debug("Tools capability enabled");
-    }
-
     if (await this.promptLoader.hasPrompts()) {
-      capabilities.prompts = { enabled: true };
+      this.capabilities.prompts = {}; // Indicate capability exists, but don't claim listChanged
       logger.debug("Prompts capability enabled");
     }
 
     if (await this.resourceLoader.hasResources()) {
-      capabilities.resources = { enabled: true };
+      this.capabilities.resources = {}; // Indicate capability exists, but don't claim listChanged/subscribe
       logger.debug("Resources capability enabled");
     }
 
-    return capabilities;
+    (this.server as any).updateCapabilities?.(this.capabilities);
+    logger.debug(`Capabilities updated: ${JSON.stringify(this.capabilities)}`);
+    
+    return this.capabilities;
+  }
+
+  private getSdkVersion(): string {
+    try {
+      const sdkSpecificFile = require.resolve("@modelcontextprotocol/sdk/server/index.js");
+
+      const sdkRootDir = resolve(dirname(sdkSpecificFile), '..', '..', '..');
+
+      const correctPackageJsonPath = join(sdkRootDir, "package.json");
+
+      const packageContent = readFileSync(correctPackageJsonPath, "utf-8");
+
+      const packageJson = JSON.parse(packageContent);
+
+      if (packageJson?.version) {
+        logger.debug(`Found SDK version: ${packageJson.version}`);
+        return packageJson.version;
+      } else {
+        logger.warn("Could not determine SDK version from its package.json.");
+        return "unknown";
+      }
+    } catch (error: any) {
+      logger.warn(`Failed to read SDK package.json: ${error.message}`);
+      return "unknown";
+    }
   }
 
   async start() {
     try {
+      if (this.isRunning) {
+        throw new Error("Server is already running");
+      }
+      this.isRunning = true;
+
+      const sdkVersion = this.getSdkVersion();
+      logger.info(`Starting MCP server with SDK ${sdkVersion}...`);
+
       const tools = await this.toolLoader.loadTools();
       this.toolsMap = new Map(
         tools.map((tool: ToolProtocol) => [tool.name, tool])
@@ -276,36 +448,113 @@ export class MCPServer {
       );
 
       await this.detectCapabilities();
+      logger.info(`Capabilities detected: ${JSON.stringify(this.capabilities)}`);
+      
+      this.setupHandlers();
 
-      const transport = new StdioServerTransport();
-      await this.server.connect(transport);
+      this.transport = this.createTransport();
+      
+      logger.info(`Connecting transport (${this.transport.type}) to SDK Server...`);
+      await this.server.connect(this.transport);
 
-      logger.info(`Started ${this.serverName}@${this.serverVersion}`);
+      logger.info(`Started ${this.serverName}@${this.serverVersion} successfully on transport ${this.transport.type}`);
+      
+      logger.info(`Tools (${tools.length}): ${tools.map(t => t.name).join(', ') || 'None'}`);
+      if (this.capabilities.prompts) {
+        logger.info(`Prompts (${prompts.length}): ${prompts.map(p => p.name).join(', ') || 'None'}`);
+      }
+      if (this.capabilities.resources) {
+        logger.info(`Resources (${resources.length}): ${resources.map(r => r.uri).join(', ') || 'None'}`);
+      }
 
-      if (tools.length > 0) {
-        logger.info(
-          `Tools (${tools.length}): ${Array.from(this.toolsMap.keys()).join(
-            ", "
-          )}`
-        );
-      }
-      if (prompts.length > 0) {
-        logger.info(
-          `Prompts (${prompts.length}): ${Array.from(
-            this.promptsMap.keys()
-          ).join(", ")}`
-        );
-      }
-      if (resources.length > 0) {
-        logger.info(
-          `Resources (${resources.length}): ${Array.from(
-            this.resourcesMap.keys()
-          ).join(", ")}`
-        );
-      }
-    } catch (error) {
-      logger.error(`Server initialization error: ${error}`);
+      const shutdownHandler = async (signal: string) => {
+        if (!this.isRunning) return;
+        logger.info(`Received ${signal}. Shutting down...`);
+        try {
+          await this.stop();
+        } catch (e: any) {
+          logger.error(`Shutdown error via ${signal}: ${e.message}`);
+          process.exit(1);
+        }
+      };
+      
+      process.on('SIGINT', () => shutdownHandler('SIGINT'));
+      process.on('SIGTERM', () => shutdownHandler('SIGTERM'));
+
+      this.shutdownPromise = new Promise((resolve) => {
+        this.shutdownResolve = resolve;
+      });
+
+      logger.info("Server running and ready.");
+      await this.shutdownPromise;
+
+    } catch (error: any) {
+      logger.error(`Server failed to start: ${error.message}\n${error.stack}`);
+      this.isRunning = false;
       throw error;
     }
+  }
+
+
+
+
+  async stop() {
+    if (!this.isRunning) {
+      logger.debug("Stop called, but server not running.");
+      return;
+    }
+
+    try {
+      logger.info("Stopping server...");
+      
+      let transportError: Error | null = null;
+      let sdkServerError: Error | null = null;
+      
+      if (this.transport) {
+        try {
+          logger.debug(`Closing transport (${this.transport.type})...`);
+          await this.transport.close();
+          logger.info(`Transport closed.`);
+        } catch (e: any) {
+          transportError = e;
+          logger.error(`Error closing transport: ${e.message}`);
+        }
+        this.transport = undefined;
+      }
+      
+      if (this.server) {
+        try {
+          logger.debug("Closing SDK Server...");
+          await this.server.close();
+          logger.info("SDK Server closed.");
+        } catch (e: any) {
+          sdkServerError = e;
+          logger.error(`Error closing SDK Server: ${e.message}`);
+        }
+      }
+      
+      this.isRunning = false;
+      
+      if (this.shutdownResolve) {
+        this.shutdownResolve();
+        logger.debug("Shutdown promise resolved.");
+      } else {
+        logger.warn("Shutdown resolve function not found.");
+      }
+      
+      if (transportError || sdkServerError) {
+        logger.error("Errors occurred during server stop.");
+        throw new Error(`Server stop failed. TransportError: ${transportError?.message}, SDKServerError: ${sdkServerError?.message}`);
+      }
+      
+      logger.info("MCP server stopped successfully.");
+    } catch (error) {
+      logger.error(`Error stopping server: ${error}`);
+      throw error;
+    }
+  }
+
+  get IsRunning(): boolean {
+    return this.isRunning;
   }
 }

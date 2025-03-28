@@ -1,21 +1,26 @@
-# mcp-framework
+# MCP Framework
 
-MCP is a framework for building Model Context Protocol (MCP) servers elegantly in TypeScript.
+MCP-Framework is a framework for building Model Context Protocol (MCP) servers elegantly in TypeScript.
 
 MCP-Framework gives you architecture out of the box, with automatic directory-based discovery for tools, resources, and prompts. Use our powerful MCP abstractions to define tools, resources, or prompts in an elegant way. Our cli makes getting started with your own MCP server a breeze
 
-[Read the full docs here](https://mcp-framework.com)
-
-Get started fast with mcp-framework ⚡⚡⚡
-
 ## Features
 
-- 🛠️ Automatic directory-based discovery and loading for tools, prompts, and resources
-- 🏗️ Powerful abstractions with full type safety
-- 🚀 Simple server setup and configuration
-- 📦 CLI for rapid development and project scaffolding
+- 🛠️ Automatic discovery and loading of tools, resources, and prompts
+- Multiple transport support (stdio, SSE, HTTP Stream)
+- TypeScript-first development with full type safety
+- Built on the official MCP SDK
+- Easy-to-use base classes for tools, prompts, and resources
+- Out of the box authentication for SSE endpoints
 
-## Quick Start
+
+# [Read the full docs here](https://mcp-framework.com)
+
+
+
+
+
+## Creating a repository with mcp-framework
 
 ### Using the CLI (Recommended)
 
@@ -32,12 +37,6 @@ cd my-mcp-server
 # Your server is ready to use!
 ```
 
-### Manual Installation
-
-```bash
-npm install mcp-framework
-```
-
 ## CLI Usage
 
 The framework provides a powerful CLI for managing your MCP server projects:
@@ -47,7 +46,16 @@ The framework provides a powerful CLI for managing your MCP server projects:
 ```bash
 # Create a new project
 mcp create <your project name here>
+
+# Create a new project with the new EXPERIMENTAL HTTP transport
+Heads up: This will set cors allowed origin to "*", modify it in the index if you wish
+mcp create <your project name here> --http --port 1337 --cors
 ```
+
+# Options:
+# --http: Use HTTP transport instead of default stdio
+# --port <number>: Specify HTTP port (default: 8080)
+# --cors: Enable CORS with wildcard (*) access
 
 ### Adding a Tool
 
@@ -140,11 +148,30 @@ Add this configuration to your Claude Desktop config file:
 2. Run \`npm run build\` to compile
 3. The server will automatically load your tools on startup
 
-## Components Overview
+## Environment Variables
 
-### 1. Tools (Main Component)
+The framework supports the following environment variables for configuration:
 
-Tools are the primary way to extend an LLM's capabilities. Each tool should perform a specific function:
+| Variable              | Description                                           | Default     |
+|-----------------------|-------------------------------------------------------|-------------|
+| MCP_ENABLE_FILE_LOGGING | Enable logging to files (true/false)                 | false       |
+| MCP_LOG_DIRECTORY     | Directory where log files will be stored             | logs        |
+| MCP_DEBUG_CONSOLE     | Display debug level messages in console (true/false) | false       |
+
+Example usage:
+
+```bash
+# Enable file logging
+MCP_ENABLE_FILE_LOGGING=true node dist/index.js
+
+# Specify a custom log directory
+MCP_ENABLE_FILE_LOGGING=true MCP_LOG_DIRECTORY=my-logs
+# Enable debug messages in console
+MCP_DEBUG_CONSOLE=true```
+
+## Quick Start
+
+### Creating a Tool
 
 ```typescript
 import { MCPTool } from "mcp-framework";
@@ -173,149 +200,222 @@ class ExampleTool extends MCPTool<ExampleInput> {
 export default ExampleTool;
 ```
 
-### 2. Prompts (Optional)
-
-Prompts help structure conversations with Claude:
+### Setting up the Server
 
 ```typescript
-import { MCPPrompt } from "mcp-framework";
-import { z } from "zod";
+import { MCPServer } from "mcp-framework";
 
-interface GreetingInput {
-  name: string;
-  language?: string;
-}
+const server = new MCPServer();
 
-class GreetingPrompt extends MCPPrompt<GreetingInput> {
-  name = "greeting";
-  description = "Generate a greeting in different languages";
-
-  schema = {
-    name: {
-      type: z.string(),
-      description: "Name to greet",
-      required: true,
-    },
-    language: {
-      type: z.string().optional(),
-      description: "Language for greeting",
-      required: false,
-    },
-  };
-
-  async generateMessages({ name, language = "English" }: GreetingInput) {
-    return [
-      {
-        role: "user",
-        content: {
-          type: "text",
-          text: `Generate a greeting for ${name} in ${language}`,
-        },
-      },
-    ];
+// OR (mutually exclusive!) with SSE transport
+const server = new MCPServer({
+  transport: {
+    type: "sse",
+    options: {
+      port: 8080            // Optional (default: 8080)
+    }
   }
-}
+});
 
-export default GreetingPrompt;
+// Start the server
+await server.start();
 ```
 
-### 3. Resources (Optional)
+## Transport Configuration
 
-Resources provide data access capabilities:
+### stdio Transport (Default)
+
+The stdio transport is used by default if no transport configuration is provided:
 
 ```typescript
-import { MCPResource, ResourceContent } from "mcp-framework";
+const server = new MCPServer();
+// or explicitly:
+const server = new MCPServer({
+  transport: { type: "stdio" }
+});
+```
 
-class ConfigResource extends MCPResource {
-  uri = "config://app/settings";
-  name = "Application Settings";
-  description = "Current application configuration";
-  mimeType = "application/json";
+### SSE Transport
 
-  async read(): Promise<ResourceContent[]> {
-    const config = {
-      theme: "dark",
-      language: "en",
+To use Server-Sent Events (SSE) transport:
+
+```typescript
+const server = new MCPServer({
+  transport: {
+    type: "sse",
+    options: {
+      port: 8080,            // Optional (default: 8080)
+      endpoint: "/sse",      // Optional (default: "/sse")
+      messageEndpoint: "/messages", // Optional (default: "/messages")
+      cors: {
+        allowOrigin: "*",    // Optional (default: "*")
+        allowMethods: "GET, POST, OPTIONS", // Optional (default: "GET, POST, OPTIONS")
+        allowHeaders: "Content-Type, Authorization, x-api-key", // Optional (default: "Content-Type, Authorization, x-api-key")
+        exposeHeaders: "Content-Type, Authorization, x-api-key", // Optional (default: "Content-Type, Authorization, x-api-key")
+        maxAge: "86400"      // Optional (default: "86400")
+      }
+    }
+  }
+});
+```
+
+### HTTP Stream Transport
+
+To use HTTP Stream transport:
+
+```typescript
+const server = new MCPServer({
+  transport: {
+    type: "http-stream",
+    options: {
+      port: 8080,                // Optional (default: 8080)
+      endpoint: "/mcp",          // Optional (default: "/mcp") 
+      responseMode: "batch",     // Optional (default: "batch"), can be "batch" or "stream"
+      batchTimeout: 30000,       // Optional (default: 30000ms) - timeout for batch responses
+      maxMessageSize: "4mb",     // Optional (default: "4mb") - maximum message size
+      
+      // Session configuration
+      session: {
+        enabled: true,           // Optional (default: true)
+        headerName: "Mcp-Session-Id", // Optional (default: "Mcp-Session-Id")
+        allowClientTermination: true, // Optional (default: true)
+      },
+      
+      // Stream resumability (for missed messages)
+      resumability: {
+        enabled: false,          // Optional (default: false)
+        historyDuration: 300000, // Optional (default: 300000ms = 5min) - how long to keep message history
+      },
+      
+      // CORS configuration
+      cors: {
+        allowOrigin: "*"         // Other CORS options use defaults
+      }
+    }
+  }
+});
+```
+
+#### Response Modes
+
+The HTTP Stream transport supports two response modes:
+
+1. **Batch Mode** (Default): Responses are collected and sent as a single JSON-RPC response. This is suitable for typical request-response patterns and is more efficient for most use cases.
+
+2. **Stream Mode**: All responses are sent over a persistent SSE connection opened for each request. This is ideal for long-running operations or when the server needs to send multiple messages in response to a single request.
+
+You can configure the response mode based on your specific needs:
+
+```typescript
+// For batch mode (default):
+const server = new MCPServer({
+  transport: {
+    type: "http-stream",
+    options: {
+      responseMode: "batch"
+    }
+  }
+});
+
+// For stream mode:
+const server = new MCPServer({
+  transport: {
+    type: "http-stream",
+    options: {
+      responseMode: "stream"
+    }
+  }
+});
+```
+
+#### HTTP Stream Transport Features
+
+- **Session Management**: Automatic session tracking and management
+- **Stream Resumability**: Optional support for resuming streams after connection loss
+- **Batch Processing**: Support for JSON-RPC batch requests/responses
+- **Comprehensive Error Handling**: Detailed error responses with JSON-RPC error codes
+
+## Authentication
+
+MCP Framework provides optional authentication for SSE endpoints. You can choose between JWT and API Key authentication, or implement your own custom authentication provider.
+
+### JWT Authentication
+
+```typescript
+import { MCPServer, JWTAuthProvider } from "mcp-framework";
+import { Algorithm } from "jsonwebtoken";
+
+const server = new MCPServer({
+  transport: {
+    type: "sse",
+    options: {
+      auth: {
+        provider: new JWTAuthProvider({
+          secret: process.env.JWT_SECRET,
+          algorithms: ["HS256" as Algorithm], // Optional (default: ["HS256"])
+          headerName: "Authorization"         // Optional (default: "Authorization")
+        }),
+        endpoints: {
+          sse: true,      // Protect SSE endpoint (default: false)
+          messages: true  // Protect message endpoint (default: true)
+        }
+      }
+    }
+  }
+});
+```
+
+Clients must include a valid JWT token in the Authorization header:
+```
+Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
+```
+
+### API Key Authentication
+
+```typescript
+import { MCPServer, APIKeyAuthProvider } from "mcp-framework";
+
+const server = new MCPServer({
+  transport: {
+    type: "sse",
+    options: {
+      auth: {
+        provider: new APIKeyAuthProvider({
+          keys: [process.env.API_KEY],
+          headerName: "X-API-Key" // Optional (default: "X-API-Key")
+        })
+      }
+    }
+  }
+});
+```
+
+Clients must include a valid API key in the X-API-Key header:
+```
+X-API-Key: your-api-key
+```
+
+### Custom Authentication
+
+You can implement your own authentication provider by implementing the `AuthProvider` interface:
+
+```typescript
+import { AuthProvider, AuthResult } from "mcp-framework";
+import { IncomingMessage } from "node:http";
+
+class CustomAuthProvider implements AuthProvider {
+  async authenticate(req: IncomingMessage): Promise<boolean | AuthResult> {
+    // Implement your custom authentication logic
+    return true;
+  }
+
+  getAuthError() {
+    return {
+      status: 401,
+      message: "Authentication failed"
     };
-
-    return [
-      {
-        uri: this.uri,
-        mimeType: this.mimeType,
-        text: JSON.stringify(config, null, 2),
-      },
-    ];
   }
 }
-
-export default ConfigResource;
-```
-
-## Project Structure
-
-```
-your-project/
-├── src/
-│   ├── tools/          # Tool implementations (Required)
-│   │   └── ExampleTool.ts
-│   ├── prompts/        # Prompt implementations (Optional)
-│   │   └── GreetingPrompt.ts
-│   ├── resources/      # Resource implementations (Optional)
-│   │   └── ConfigResource.ts
-│   └── index.ts
-├── package.json
-└── tsconfig.json
-```
-
-## Automatic Feature Discovery
-
-The framework automatically discovers and loads:
-
-- Tools from the `src/tools` directory
-- Prompts from the `src/prompts` directory (if present)
-- Resources from the `src/resources` directory (if present)
-
-Each feature should be in its own file and export a default class that extends the appropriate base class:
-
-- `MCPTool` for tools
-- `MCPPrompt` for prompts
-- `MCPResource` for resources
-
-### Base Classes
-
-#### MCPTool
-
-- Handles input validation using Zod
-- Provides error handling and response formatting
-- Includes fetch helper for HTTP requests
-
-#### MCPPrompt
-
-- Manages prompt arguments and validation
-- Generates message sequences for LLM interactions
-- Supports dynamic prompt templates
-
-#### MCPResource
-
-- Exposes data through URI-based system
-- Supports text and binary content
-- Optional subscription capabilities for real-time updates
-
-## Type Safety
-
-All features use Zod for runtime type validation and TypeScript for compile-time type checking. Define your input schemas using Zod types:
-
-```typescript
-schema = {
-  parameter: {
-    type: z.string().email(),
-    description: "User email address",
-  },
-  count: {
-    type: z.number().min(1).max(100),
-    description: "Number of items",
-  },
-};
 ```
 
 ## License
