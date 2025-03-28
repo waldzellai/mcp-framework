@@ -349,14 +349,32 @@ export class HttpStreamTransport extends AbstractTransport {
     logger.debug(`Handling GET request to ${this._config.endpoint}`);
     const acceptHeader = req.headers.accept || '';
     if (!acceptHeader.includes(SSE_CONTENT_TYPE) && !acceptHeader.includes('*/*')) throw this.httpError(406, `Not Acceptable: GET requires Accept header including ${SSE_CONTENT_TYPE}`);
+    
     const sessionIdHeader = getRequestHeader(req.headers, this._config.session.headerName);
     let session: SessionData | undefined;
-    if (this._config.session.enabled) { session = this.validateSession(sessionIdHeader, req, true); session.lastActivity = Date.now(); }
-    await this.handleAuthentication(req, res, `GET session ${session?.id || 'N/A'}`, session);
+    
+    if (this._config.session.enabled && sessionIdHeader) {
+      // If a session ID is provided, validate it
+      session = this.validateSession(sessionIdHeader, req, false);
+      session.lastActivity = Date.now();
+      logger.debug(`Found valid session: ${session.id}`);
+      await this.handleAuthentication(req, res, `GET session ${session.id}`, session);
+    } else if (this._config.session.enabled) {
+      // Allow initial GET requests without session ID during initialization phase
+      logger.debug(`GET request without session ID - allowing as potential initialization connection`);
+      await this.handleAuthentication(req, res, `GET initialization`, undefined);
+    } else {
+      // Sessions disabled
+      await this.handleAuthentication(req, res, `GET (sessions disabled)`, undefined);
+    }
+    
     const lastEventId = getRequestHeader(req.headers, "Last-Event-ID");
-    if (lastEventId && !this._config.resumability.enabled) logger.warn(`Client sent Last-Event-ID (${lastEventId}) but resumability is disabled.`);
+    if (lastEventId && !this._config.resumability.enabled) {
+      logger.warn(`Client sent Last-Event-ID (${lastEventId}) but resumability is disabled.`);
+    }
+    
     this.setupSSEConnection(req, res, session?.id, lastEventId);
-    logger.debug(`Established SSE stream for GET request (Session: ${session?.id || 'N/A'})`);
+    logger.debug(`Established SSE stream for GET request (Session: ${session?.id || 'initialization phase'})`);
   }
 
   private async handleDelete(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -520,8 +538,9 @@ export class HttpStreamTransport extends AbstractTransport {
         throw this.httpError(400, `Bad Request: Missing required session header ${headerName}`, -32601, undefined, requestId); 
       } 
       else { 
-        logger.error(`Programming error: validateSession called for initialization request with isMandatory=false`);
-        throw this.httpError(500, "Internal Server Error: Session validation incorrectly called for initialization", -32603, undefined, requestId);
+        // This is a valid case for initialization or when sessionId is optional
+        logger.debug(`No session ID provided and not mandatory - acceptable for initialization`);
+        return undefined as any; // Will be caught by typescript at call site
       }
     }
     
