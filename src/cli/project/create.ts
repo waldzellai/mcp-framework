@@ -57,7 +57,7 @@ export async function createProject(name?: string, options?: { http?: boolean, c
       scripts: {
         build: "tsc && mcp-build",
         watch: "tsc --watch",
-        start: "npm run build && node dist/index.js"
+        start: "node dist/index.js"
       },
       dependencies: {
         "mcp-framework": "^0.2.2"
@@ -66,6 +66,9 @@ export async function createProject(name?: string, options?: { http?: boolean, c
         "@types/node": "^20.11.24",
         "typescript": "^5.3.3"
       },
+      engines: {
+        "node": ">=18.19.0"
+      }
     };
 
     const tsconfig = {
