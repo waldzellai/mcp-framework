@@ -15,28 +15,38 @@ import getRawBody from "raw-body";
 
 import { AbstractTransport } from "../base.js";
 import { DEFAULT_HTTP_STREAM_CONFIG, HttpStreamTransportConfig, HttpStreamTransportConfigInternal, SessionData, ActiveSseConnection, BatchResponseState } from "./types.js";
-import { AuthProvider, AuthResult, DEFAULT_AUTH_ERROR } from "../../auth/types.js";
+import { AuthResult, DEFAULT_AUTH_ERROR } from "../../auth/types.js";
 import { logger } from "../../core/Logger.js";
 import { getRequestHeader, setResponseHeaders } from "../../utils/headers.js";
 import { DEFAULT_CORS_CONFIG } from "../sse/types.js";
 
-function isRequest(msg: any): msg is JsonRpcRequest {
-  return msg && typeof msg.method === 'string' && msg.jsonrpc === "2.0" && 'id' in msg && msg.id !== null && !('result' in msg || 'error' in msg);
+function isRequest(msg: JsonRpcMessage): msg is JsonRpcRequest {
+  return msg && 
+         msg.jsonrpc === "2.0" && 
+         'id' in msg && 
+         msg.id !== null && 
+         !('result' in msg || 'error' in msg) &&
+         'method' in msg && 
+         typeof (msg as any).method === 'string';
 }
 
-function isNotification(msg: any): msg is JsonRpcNotification {
-  return msg && typeof msg.method === 'string' && msg.jsonrpc === "2.0" && !('id' in msg);
+function isNotification(msg: JsonRpcMessage): msg is JsonRpcNotification {
+  return msg && 
+         msg.jsonrpc === "2.0" && 
+         !('id' in msg) && 
+         'method' in msg &&
+         typeof (msg as any).method === 'string';
 }
 
-function isSuccessResponse(msg: any): msg is JsonRpcSuccessResponse {
+function isSuccessResponse(msg: JsonRpcMessage): msg is JsonRpcSuccessResponse {
   return msg && msg.jsonrpc === "2.0" && 'id' in msg && 'result' in msg && !('error' in msg);
 }
 
-function isErrorResponse(msg: any): msg is JsonRpcErrorResponse {
+function isErrorResponse(msg: JsonRpcMessage): msg is JsonRpcErrorResponse {
   return msg && msg.jsonrpc === "2.0" && 'id' in msg && 'error' in msg && !('result' in msg);
 }
 
-function isResponse(msg: any): msg is JsonRpcSuccessResponse | JsonRpcErrorResponse {
+function isResponse(msg: JsonRpcMessage): msg is JsonRpcSuccessResponse | JsonRpcErrorResponse {
     return isSuccessResponse(msg) || isErrorResponse(msg);
 }
 
@@ -433,7 +443,16 @@ export class HttpStreamTransport extends AbstractTransport {
     logger.info(`Cleaning up all ${this._activeSseConnections.size} active SSE connections and ${this._pendingBatches.size} pending batches.`);
     Array.from(this._activeSseConnections).forEach(conn => this.cleanupConnection(conn, "Server shutting down"));
     this._requestStreamMap.clear();
-    this._pendingBatches.forEach(batchState => { clearTimeout(batchState.timeoutId); if (batchState.res && !batchState.res.writableEnded) { try { batchState.res.end(); } catch {} } });
+    this._pendingBatches.forEach(batchState => { 
+      clearTimeout(batchState.timeoutId); 
+      if (batchState.res && !batchState.res.writableEnded) { 
+        try { 
+          batchState.res.end(); 
+        } catch (error) { 
+          logger.warn(`Error ending response during cleanup: ${(error as Error).message}`); 
+        } 
+      } 
+    });
     this._pendingBatches.clear();
     this._activeSessions.clear();
   }
@@ -442,18 +461,28 @@ export class HttpStreamTransport extends AbstractTransport {
     logger.debug(`Attempting to send message: ${JSON.stringify(message)}`);
 
     if (isResponse(message) && message.id !== null) {
-        for (const [res, batchState] of this._pendingBatches.entries()) {
-            if (!batchState.isCompleted && batchState.requestIds.has(message.id)) {
+        let foundInBatch = false;
+        this._pendingBatches.forEach((batchState) => {
+            if (!batchState.isCompleted && 
+                typeof message.id === 'string' || typeof message.id === 'number' &&
+                batchState.requestIds.has(message.id)) {
                  logger.debug(`Batch mode: Collected response for ID ${message.id}`);
-                 batchState.responses.set(message.id, message); 
+                 if (typeof message.id === 'string' || typeof message.id === 'number') {
+                   batchState.responses.set(message.id, message as JsonRpcSuccessResponse | JsonRpcErrorResponse); 
+                 }
                  if (batchState.responses.size === batchState.requestIds.size) {
                      this.completeBatchResponse(batchState);
                  } else {
                      logger.debug(`Batch mode: Still waiting for ${batchState.requestIds.size - batchState.responses.size} responses.`);
                  }
-                 return;
+                 foundInBatch = true;
             }
+        });
+        
+        if (foundInBatch) {
+            return;
         }
+        
         logger.debug(`Response ID ${message.id} did not match pending batch, checking streams.`);
     }
 

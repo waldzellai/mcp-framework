@@ -1,6 +1,7 @@
 
 import { readFile } from "fs/promises";
 import { findUp } from 'find-up';
+import { logger } from "../../core/Logger.js";
 
 
 export async function validateMCPProject() {
@@ -21,6 +22,7 @@ export async function validateMCPProject() {
     }
   } catch (error) {
     console.error("Error: Must be run from an MCP project directory");
+    logger.error(`Project validation failed: ${(error as Error).message}`);
     process.exit(1);
   }
 }

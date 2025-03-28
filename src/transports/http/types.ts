@@ -1,5 +1,5 @@
 import { AuthConfig } from "../../auth/types.js";
-import { CORSConfig, DEFAULT_CORS_CONFIG } from "../sse/types.js";
+import { CORSConfig } from "../sse/types.js";
 import { ServerResponse } from "node:http";
 
 // --- Core JSON-RPC Types (Framework Specific) ---
@@ -41,7 +41,6 @@ export interface JsonRpcErrorResponse extends BaseJsonRpcMessage {
 
 /**
  * Union type representing any valid JSON-RPC 2.0 message.
- * Use this instead of the SDK's inferred type.
  */
 export type JsonRpcMessage =
   | JsonRpcRequest

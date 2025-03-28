@@ -26,7 +26,7 @@ export class ToolLoader {
       logger.debug(`Tools directory has valid files: ${hasValidFiles}`);
       return hasValidFiles;
     } catch (error) {
-      logger.debug("No tools directory found");
+      logger.debug(`No tools directory found: ${(error as Error).message}`);
       return false;
     }
   }
@@ -72,7 +72,7 @@ export class ToolLoader {
       try {
         stats = await fs.stat(this.TOOLS_DIR);
       } catch (error) {
-        logger.debug("No tools directory found");
+        logger.debug(`No tools directory found: ${(error as Error).message}`);
         return [];
       }
 
@@ -108,7 +108,7 @@ export class ToolLoader {
             tools.push(tool);
           }
         } catch (error) {
-          logger.error(`Error loading tool ${file}: ${error}`);
+          logger.error(`Error loading tool ${file}: ${(error as Error).message}`);
         }
       }
 
@@ -119,7 +119,7 @@ export class ToolLoader {
       );
       return tools;
     } catch (error) {
-      logger.error(`Failed to load tools: ${error}`);
+      logger.error(`Failed to load tools: ${(error as Error).message}`);
       return [];
     }
   }
