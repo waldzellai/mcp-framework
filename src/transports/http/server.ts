@@ -241,18 +241,14 @@ export class HttpStreamTransport extends AbstractTransport {
       throw this.httpError(400, `Bad Request: ${e.message}`, -32700, undefined, firstRequestId);
     }
 
-    // Find initialize requests and validate batching
     const initializeRequests = parsedMessages.filter(msg => isRequest(msg) && msg.method === 'initialize');
     
-    // Check if initialize request is present
     if (initializeRequests.length > 0) {
-      // If we have an initialize request, verify it's not batched with other requests
       if (initializeRequests.length > 1) {
         logger.error("Multiple initialize requests in the same batch");
         throw this.httpError(400, "Bad Request: Multiple initialize requests in the same batch", -32600, undefined, firstRequestId);
       }
       
-      // If initialize is present and the batch contains more than 1 message, reject it
       if (parsedMessages.length > 1) {
         logger.error("Initialize request cannot be batched with other requests");
         throw this.httpError(400, "Bad Request: Initialize request must not be part of a JSON-RPC batch", -32600, undefined, firstRequestId);
