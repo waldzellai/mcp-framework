@@ -139,6 +139,7 @@ export interface HttpStreamTransportConfig {
      * How long to keep message history in ms. Default: 300000 (5 min)
      */
     historyDuration?: number;
+    messageStoreType?: 'connection' | 'global';
   };
 }
 
@@ -170,6 +171,7 @@ export const DEFAULT_HTTP_STREAM_CONFIG: HttpStreamTransportConfigInternal = {
   resumability: {
     enabled: false,
     historyDuration: 300000,
+    messageStoreType: 'global',
   },
   cors: {
     allowOrigin: "*",
@@ -197,7 +199,7 @@ export interface ActiveSseConnection {
   sessionId?: string;
   streamId: string;
   lastEventIdSent: string | null;
-  messageHistory?: Array<{ eventId: string; message: JsonRpcMessage; timestamp: number }>;
+  messageHistory?: Array<MessageEntry>;
   pingInterval?: NodeJS.Timeout;
   isPostConnection: boolean;
   pendingResponseIds?: Set<string | number>;
@@ -212,4 +214,10 @@ export interface BatchResponseState {
     responses: Map<string | number, JsonRpcSuccessResponse | JsonRpcErrorResponse>;
     timeoutId: NodeJS.Timeout;
     isCompleted: boolean;
+}
+
+export interface MessageEntry {
+  eventId: string;
+  message: JsonRpcMessage;
+  timestamp: number;
 }
