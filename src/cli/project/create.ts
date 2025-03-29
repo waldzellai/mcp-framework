@@ -5,10 +5,11 @@ import prompts from "prompts";
 import { generateReadme } from "../templates/readme.js";
 import { execa } from "execa";
 
-export async function createProject(name?: string, options?: { http?: boolean, cors?: boolean, port?: number, install?: boolean }) {
+export async function createProject(name?: string, options?: { http?: boolean, cors?: boolean, port?: number, install?: boolean, example?: boolean }) {
   let projectName: string;
-  // Default install to true if not specified
+  // Default install and example to true if not specified
   const shouldInstall = options?.install !== false;
+  const shouldCreateExample = options?.example !== false;
 
   if (!name) {
     const response = await prompts([
@@ -147,14 +148,21 @@ class ExampleTool extends MCPTool<ExampleInput> {
 
 export default ExampleTool;`;
 
-    console.log("Creating project files...");
-    await Promise.all([
+    // Prepare the files to write
+    const filesToWrite = [
       writeFile(join(projectDir, "package.json"), JSON.stringify(packageJson, null, 2)),
       writeFile(join(projectDir, "tsconfig.json"), JSON.stringify(tsconfig, null, 2)),
       writeFile(join(projectDir, "README.md"), generateReadme(projectName)),
       writeFile(join(srcDir, "index.ts"), indexTs),
-      writeFile(join(toolsDir, "ExampleTool.ts"), exampleToolTs),
-    ]);
+    ];
+
+    // Conditionally add the example tool
+    if (shouldCreateExample) {
+      filesToWrite.push(writeFile(join(toolsDir, "ExampleTool.ts"), exampleToolTs));
+    }
+
+    console.log("Creating project files...");
+    await Promise.all(filesToWrite);
 
     process.chdir(projectDir);
 

@@ -26,6 +26,7 @@ program
   .option("--cors", "enable CORS with wildcard (*) access")
   .option("--port <number>", "specify HTTP port (only valid with --http)", (val) => parseInt(val, 10))
   .option("--no-install", "skip npm install and build steps")
+  .option("--no-example", "skip creating example tool")
   .action(createProject);
 
 program
