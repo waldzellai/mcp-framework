@@ -199,6 +199,8 @@ export interface ActiveSseConnection {
   lastEventIdSent: string | null;
   messageHistory?: Array<{ eventId: string; message: JsonRpcMessage; timestamp: number }>;
   pingInterval?: NodeJS.Timeout;
+  isPostConnection: boolean;
+  pendingResponseIds?: Set<string | number>;
 }
 
 /**
