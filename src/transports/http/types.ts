@@ -99,7 +99,13 @@ export interface HttpStreamTransportConfig {
   /**
    * CORS configuration
    */
-  cors?: CORSConfig;
+  cors?: {
+    allowOrigin?: string;
+    allowMethods?: string;
+    allowHeaders?: string;
+    exposeHeaders?: string;
+    maxAge?: string;
+  };
   
   /**
    * Authentication configuration
@@ -141,17 +147,23 @@ export interface HttpStreamTransportConfig {
     historyDuration?: number;
     messageStoreType?: 'connection' | 'global';
   };
+  
+  /**
+   * Whether to enable GET SSE. Default: true
+   */
+  enableGetSse?: boolean;
 }
 
 /**
  * Internal configuration type with required fields
  */
 export type HttpStreamTransportConfigInternal = Required<Omit<HttpStreamTransportConfig, 'headers' | 'auth' | 'cors' | 'session' | 'resumability'>> & {
+  cors: Required<NonNullable<HttpStreamTransportConfig['cors']>>;
   session: Required<NonNullable<HttpStreamTransportConfig['session']>>;
   resumability: Required<NonNullable<HttpStreamTransportConfig['resumability']>>;
-  cors: Required<NonNullable<CORSConfig>>;
   headers?: Record<string, string>;
   auth?: AuthConfig;
+  enableGetSse: boolean;
 };
 
 /**
@@ -173,6 +185,7 @@ export const DEFAULT_HTTP_STREAM_CONFIG: HttpStreamTransportConfigInternal = {
     historyDuration: 300000,
     messageStoreType: 'global',
   },
+  enableGetSse: true,
   cors: {
     allowOrigin: "*",
     allowMethods: "GET, POST, DELETE, OPTIONS",

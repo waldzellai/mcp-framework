@@ -82,6 +82,7 @@ export class HttpStreamTransport extends AbstractTransport {
       cors: { ...DEFAULT_CORS_CONFIG, ...(config.cors || {}) } as Required<NonNullable<HttpStreamTransportConfig['cors']>>,
       auth: config.auth ?? DEFAULT_HTTP_STREAM_CONFIG.auth,
       headers: config.headers ?? DEFAULT_HTTP_STREAM_CONFIG.headers,
+      enableGetSse: config.enableGetSse ?? DEFAULT_HTTP_STREAM_CONFIG.enableGetSse,
     };
 
     if (this._config.auth?.endpoints) {
@@ -95,6 +96,7 @@ export class HttpStreamTransport extends AbstractTransport {
       sessionEnabled: this._config.session.enabled, 
       resumabilityEnabled: this._config.resumability.enabled,
       resumabilityStore: this._config.resumability.messageStoreType,
+      enableGetSse: this._config.enableGetSse,
       authEnabled: !!this._config.auth, 
       corsOrigin: this._config.cors.allowOrigin
     }, null, 2)}`);
@@ -108,7 +110,9 @@ export class HttpStreamTransport extends AbstractTransport {
     const corsConfig = this._config.cors;
     const headers: Record<string, string> = {
       "Access-Control-Allow-Origin": corsConfig.allowOrigin || req.headers.origin || '*',
-      "Access-Control-Allow-Methods": corsConfig.allowMethods,
+      "Access-Control-Allow-Methods": this._config.enableGetSse ? 
+        corsConfig.allowMethods : 
+        corsConfig.allowMethods.replace(/GET,?\s*/, ''),
       "Access-Control-Allow-Headers": corsConfig.allowHeaders,
       "Access-Control-Expose-Headers": [corsConfig.exposeHeaders, this._config.session.enabled ? this._config.session.headerName : null].filter(Boolean).join(', '),
       "Access-Control-Allow-Credentials": "true",
@@ -181,8 +185,13 @@ export class HttpStreamTransport extends AbstractTransport {
           case "GET": await this.handleGet(req, res); break;
           case "DELETE": await this.handleDelete(req, res); break;
           default:
-             res.writeHead(405, { 'Content-Type': 'text/plain', 'Allow': 'GET, POST, DELETE, OPTIONS' }); res.end("Method Not Allowed");
-             logger.warn(`Unsupported method: ${req.method}`); break;
+             const allowHeader = this._config.enableGetSse ? 
+               'GET, POST, DELETE, OPTIONS' : 
+               'POST, DELETE, OPTIONS';
+             res.writeHead(405, { 'Content-Type': 'text/plain', 'Allow': allowHeader }); 
+             res.end("Method Not Allowed");
+             logger.warn(`Unsupported method: ${req.method}`); 
+             break;
         }
     } catch (error: any) {
         logger.error(`Error processing ${req.method} ${url.pathname}: ${error.message}`);
@@ -375,10 +384,25 @@ export class HttpStreamTransport extends AbstractTransport {
 
   private async handleGet(req: IncomingMessage, res: ServerResponse): Promise<void> {
     logger.debug(`Handling GET request to ${this._config.endpoint}`);
-    const acceptHeader = req.headers.accept || '';
-    if (!acceptHeader.includes(SSE_CONTENT_TYPE) && !acceptHeader.includes('*/*')) throw this.httpError(406, `Not Acceptable: GET requires Accept header including ${SSE_CONTENT_TYPE}`);
     
+    if (!this._config.enableGetSse) {
+      logger.debug(`GET SSE is disabled. Returning 405 Method Not Allowed.`);
+      res.writeHead(405, { 
+        'Content-Type': 'text/plain', 
+        'Allow': 'POST, DELETE, OPTIONS' 
+      });
+      res.end("Method Not Allowed: GET-based SSE is disabled on this server.");
+      return;
+    }
+    
+    const acceptHeader = req.headers.accept || '';
+    if (!acceptHeader.includes(SSE_CONTENT_TYPE) && !acceptHeader.includes('*/*')) {
+      throw this.httpError(406, `Not Acceptable: GET requires Accept header including ${SSE_CONTENT_TYPE}`);
+    }
+    
+    const lastEventId = getRequestHeader(req.headers, "Last-Event-ID");
     const sessionIdHeader = getRequestHeader(req.headers, this._config.session.headerName);
+    
     let session: SessionData | undefined;
     
     if (this._config.session.enabled && sessionIdHeader) {
@@ -393,7 +417,6 @@ export class HttpStreamTransport extends AbstractTransport {
       await this.handleAuthentication(req, res, `GET (sessions disabled)`, undefined);
     }
     
-    const lastEventId = getRequestHeader(req.headers, "Last-Event-ID");
     if (lastEventId && !this._config.resumability.enabled) {
       logger.warn(`Client sent Last-Event-ID (${lastEventId}) but resumability is disabled.`);
     }
