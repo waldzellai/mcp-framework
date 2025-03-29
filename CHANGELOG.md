@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.9](https://github.com/QuantGeekDev/mcp-framework/compare/mcp-framework-v0.2.8...mcp-framework-v0.2.9) (2025-03-29)
+
+
+### Features
+
+* add linting ([e71ebb5](https://github.com/QuantGeekDev/mcp-framework/commit/e71ebb5d538cb03510633bac0cf41bd318a0eab9))
+* add linting ([181e634](https://github.com/QuantGeekDev/mcp-framework/commit/181e634da0cf97f2f40ae8b7e4fd4e74935a1c3c))
+* add sse resumability ([4b47edb](https://github.com/QuantGeekDev/mcp-framework/commit/4b47edb243286a9f32bb81655bd0b51c2c4695e2))
+* add sse resumability ([e20b7cc](https://github.com/QuantGeekDev/mcp-framework/commit/e20b7cc887dd4b080d38e01d21ac2ef3e63843d1))
+* improve error handling for sse ([a5644af](https://github.com/QuantGeekDev/mcp-framework/commit/a5644af425563aca22fdf46ec24b1f547a5d9143))
+* improve error handling for sse ([ba1646b](https://github.com/QuantGeekDev/mcp-framework/commit/ba1646be8da98c4d86b55313c515903c692d8f9f))
+
+
+### Bug Fixes
+
+* close sse stream after post ([eef96b4](https://github.com/QuantGeekDev/mcp-framework/commit/eef96b4c429af9c2f7083352c4bd45d645927352))
+* close sse stream after post ([d6ea60d](https://github.com/QuantGeekDev/mcp-framework/commit/d6ea60deb5283551ce9730e2d20e38ffe8f6c711))
+* detect tools capability using toolLoader ([c5d34a5](https://github.com/QuantGeekDev/mcp-framework/commit/c5d34a5be034ee0fb22e888d7696d64ac703e727))
+* detect tools capability using toolLoader ([1e4c71f](https://github.com/QuantGeekDev/mcp-framework/commit/1e4c71f71634a72b7c146d84a21582e6e9d5fd3b))
+* enforce that initialize request cannot be part of JSON-RPC batch ([452740c](https://github.com/QuantGeekDev/mcp-framework/commit/452740c9bdba8df014a4cd3d5149e78190c05058))
+* enforce that initialize request cannot be part of JSON-RPC batch ([6cccf54](https://github.com/QuantGeekDev/mcp-framework/commit/6cccf54c18a6554c243d7dfdc286dcc3e92cb75f))
+* import path utilities to resolve build errors ([5a7672c](https://github.com/QuantGeekDev/mcp-framework/commit/5a7672cca08dc21d527dc1d4b6a9cbdf809938bc))
+* import path utilities to resolve build errors ([534d0de](https://github.com/QuantGeekDev/mcp-framework/commit/534d0de047e3d29f214b088c8fdad2d25444b344))
+* project validation not working on windows ([fc506d3](https://github.com/QuantGeekDev/mcp-framework/commit/fc506d3b13a7c8c25647f6d2d8b278fa25e22ea5))
+
 ## [0.2.8](https://github.com/QuantGeekDev/mcp-framework/compare/mcp-framework-v0.2.7...mcp-framework-v0.2.8) (2025-03-28)
 
 
