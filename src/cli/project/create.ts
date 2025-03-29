@@ -5,8 +5,10 @@ import prompts from "prompts";
 import { generateReadme } from "../templates/readme.js";
 import { execa } from "execa";
 
-export async function createProject(name?: string, options?: { http?: boolean, cors?: boolean, port?: number }) {
+export async function createProject(name?: string, options?: { http?: boolean, cors?: boolean, port?: number, install?: boolean }) {
   let projectName: string;
+  // Default install to true if not specified
+  const shouldInstall = options?.install !== false;
 
   if (!name) {
     const response = await prompts([
@@ -166,40 +168,41 @@ export default ExampleTool;`;
       throw new Error("Failed to initialize git repository");
     }
 
-    console.log("Installing dependencies...");
-    const npmInstall = spawnSync("npm", ["install"], {
-      stdio: "inherit",
-      shell: true
-    });
+    if (shouldInstall) {
+      console.log("Installing dependencies...");
+      const npmInstall = spawnSync("npm", ["install"], {
+        stdio: "inherit",
+        shell: true
+      });
 
-    if (npmInstall.status !== 0) {
-      throw new Error("Failed to install dependencies");
-    }
-
-    console.log("Building project...");
-    const tscBuild = await execa('npx', ['tsc'], {
-      cwd: projectDir,
-      stdio: "inherit",
-    });
-
-    if (tscBuild.exitCode !== 0) {
-      throw new Error("Failed to build TypeScript");
-    }
-
-    const mcpBuild = await execa('npx', ['mcp-build'], {
-      cwd: projectDir,
-      stdio: "inherit",
-      env: {
-        ...process.env,
-        MCP_SKIP_VALIDATION: "true"
+      if (npmInstall.status !== 0) {
+        throw new Error("Failed to install dependencies");
       }
-    });
 
-    if (mcpBuild.exitCode !== 0) {
-      throw new Error("Failed to run mcp-build");
-    }
+      console.log("Building project...");
+      const tscBuild = await execa('npx', ['tsc'], {
+        cwd: projectDir,
+        stdio: "inherit",
+      });
 
-    console.log(`
+      if (tscBuild.exitCode !== 0) {
+        throw new Error("Failed to build TypeScript");
+      }
+
+      const mcpBuild = await execa('npx', ['mcp-build'], {
+        cwd: projectDir,
+        stdio: "inherit",
+        env: {
+          ...process.env,
+          MCP_SKIP_VALIDATION: "true"
+        }
+      });
+
+      if (mcpBuild.exitCode !== 0) {
+        throw new Error("Failed to run mcp-build");
+      }
+
+      console.log(`
 Project ${projectName} created and built successfully!
 
 You can now:
@@ -207,6 +210,18 @@ You can now:
 2. Add more tools using:
    mcp add tool <n>
     `);
+    } else {
+      console.log(`
+Project ${projectName} created successfully (without dependencies)!
+
+You can now:
+1. cd ${projectName}
+2. Run 'npm install' to install dependencies
+3. Run 'npm run build' to build the project
+4. Add more tools using:
+   mcp add tool <n>
+    `);
+    }
   } catch (error) {
     console.error("Error creating project:", error);
     process.exit(1);
