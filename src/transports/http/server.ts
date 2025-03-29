@@ -241,7 +241,21 @@ export class HttpStreamTransport extends AbstractTransport {
       throw this.httpError(400, `Bad Request: ${e.message}`, -32700, undefined, firstRequestId);
     }
 
-    const isInitialize = parsedMessages.some(msg => isRequest(msg) && msg.method === 'initialize');
+    const initializeRequests = parsedMessages.filter(msg => isRequest(msg) && msg.method === 'initialize');
+    
+    if (initializeRequests.length > 0) {
+      if (initializeRequests.length > 1) {
+        logger.error("Multiple initialize requests in the same batch");
+        throw this.httpError(400, "Bad Request: Multiple initialize requests in the same batch", -32600, undefined, firstRequestId);
+      }
+      
+      if (parsedMessages.length > 1) {
+        logger.error("Initialize request cannot be batched with other requests");
+        throw this.httpError(400, "Bad Request: Initialize request must not be part of a JSON-RPC batch", -32600, undefined, firstRequestId);
+      }
+    }
+
+    const isInitialize = initializeRequests.length > 0;
     const sessionIdHeader = getRequestHeader(req.headers, this._config.session.headerName);
     let session: SessionData | undefined;
     
