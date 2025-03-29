@@ -15,7 +15,7 @@ import { ToolProtocol } from "../tools/BaseTool.js";
 import { PromptProtocol } from "../prompts/BasePrompt.js";
 import { ResourceProtocol } from "../resources/BaseResource.js";
 import { readFileSync } from "fs";
-import { join } from "path";
+import { join, resolve, dirname } from "path";
 import { logger } from "./Logger.js";
 import { ToolLoader } from "../loaders/toolLoader.js";
 import { PromptLoader } from "../loaders/promptLoader.js";
@@ -493,9 +493,6 @@ export class MCPServer {
       throw error;
     }
   }
-
-
-
 
   async stop() {
     if (!this.isRunning) {
