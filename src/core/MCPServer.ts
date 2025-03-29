@@ -313,7 +313,6 @@ export class MCPServer {
     }
 
     if (this.capabilities.resources) {
-      // No request parameter for ListResources
       this.server.setRequestHandler(ListResourcesRequestSchema, async () => {
         return {
           resources: Array.from(this.resourcesMap.values()).map(
@@ -380,13 +379,18 @@ export class MCPServer {
   }
 
   private async detectCapabilities(): Promise<ServerCapabilities> {
+    if (await this.toolLoader.hasTools()) {
+      this.capabilities.tools = {};
+      logger.debug("Tools capability enabled");
+    }
+
     if (await this.promptLoader.hasPrompts()) {
-      this.capabilities.prompts = {}; // Indicate capability exists, but don't claim listChanged
+      this.capabilities.prompts = {};
       logger.debug("Prompts capability enabled");
     }
 
     if (await this.resourceLoader.hasResources()) {
-      this.capabilities.resources = {}; // Indicate capability exists, but don't claim listChanged/subscribe
+      this.capabilities.resources = {};
       logger.debug("Resources capability enabled");
     }
 
