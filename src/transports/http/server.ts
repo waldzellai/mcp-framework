@@ -301,7 +301,17 @@ export class HttpStreamTransport extends AbstractTransport {
               logger.info(`Initialized new session: ${newSessionId} via stream`);
           }
           
-          const sseConnection = this.setupSSEConnection(req, res, newSessionId || session?.id, undefined, additionalHeaders);
+          const requestIds = new Set<string | number>();
+          clientRequests.forEach(req => requestIds.add(req.id));
+          
+          const sseConnection = this.setupSSEConnection(req, res, newSessionId || session?.id, undefined, additionalHeaders, true);
+          
+          if (requestIds.size > 0) {
+              sseConnection.pendingResponseIds = requestIds;
+              logger.debug(`Stream mode: Tracking ${requestIds.size} pending responses for stream ${sseConnection.streamId}`);
+          } else {
+              logger.debug(`Stream mode: No request IDs to track for stream ${sseConnection.streamId}. Connection will remain open.`);
+          }
           
           if (newSessionId) {
               sseConnection.sessionId = newSessionId;
@@ -380,7 +390,7 @@ export class HttpStreamTransport extends AbstractTransport {
       logger.warn(`Client sent Last-Event-ID (${lastEventId}) but resumability is disabled.`);
     }
     
-    this.setupSSEConnection(req, res, session?.id, lastEventId);
+    this.setupSSEConnection(req, res, session?.id, lastEventId, {}, false);
     logger.debug(`Established SSE stream for GET request (Session: ${session?.id || 'initialization phase'})`);
   }
 
@@ -398,17 +408,30 @@ export class HttpStreamTransport extends AbstractTransport {
     res.writeHead(200, { 'Content-Type': 'text/plain' }).end("Session terminated");
   }
 
-  private setupSSEConnection(req: IncomingMessage, res: ServerResponse, sessionId?: string, lastEventId?: string, additionalHeaders: Record<string, string> = {}): ActiveSseConnection {
+  private setupSSEConnection(
+    req: IncomingMessage, 
+    res: ServerResponse, 
+    sessionId?: string, 
+    lastEventId?: string, 
+    additionalHeaders: Record<string, string> = {},
+    isPostConnection: boolean = false
+  ): ActiveSseConnection {
     const streamId = randomUUID();
     const connection: ActiveSseConnection = {
         res, sessionId, streamId, lastEventIdSent: null,
-        messageHistory: this._config.resumability.enabled ? [] : undefined, pingInterval: undefined
+        messageHistory: this._config.resumability.enabled ? [] : undefined, 
+        pingInterval: undefined,
+        isPostConnection
     };
     
     const headers = { ...SSE_HEADERS, ...additionalHeaders };
     res.writeHead(200, headers);
     
-    logger.debug(`SSE stream ${streamId} setup (Session: ${sessionId || 'N/A'})`);
+    const originInfo = isPostConnection ? 
+      `POST (will close after responses)` : 
+      `GET (persistent until client disconnects)`;
+      
+    logger.debug(`SSE stream ${streamId} setup (Session: ${sessionId || 'N/A'}, Origin: ${originInfo})`);
     if (res.socket) { res.socket.setNoDelay(true); res.socket.setKeepAlive(true); res.socket.setTimeout(0); logger.debug(`Optimized socket for SSE stream ${streamId}`); }
     else { logger.warn(`Could not access socket for SSE stream ${streamId} to optimize.`); }
     this._activeSseConnections.add(connection);
@@ -421,7 +444,7 @@ export class HttpStreamTransport extends AbstractTransport {
     res.on("close", () => cleanupHandler("Client closed connection"));
     res.on("error", (err) => { logger.error(`SSE stream ${streamId} error: ${err.message}`); cleanupHandler(`Connection error: ${err.message}`); this._onerror?.(err); });
     res.on("finish", () => cleanupHandler("Stream finished"));
-    logger.info(`SSE stream ${streamId} active (Session: ${sessionId || 'N/A'}, Total: ${this._activeSseConnections.size})`);
+    logger.info(`SSE stream ${streamId} active (Session: ${sessionId || 'N/A'}, Origin: ${originInfo}, Total: ${this._activeSseConnections.size})`);
     return connection;
   }
 
@@ -437,6 +460,23 @@ export class HttpStreamTransport extends AbstractTransport {
     if(requestIdsToRemove.length > 0) logger.debug(`Removed ${requestIdsToRemove.length} request associations for closed stream ${streamId}`);
     if (connection.res && !connection.res.writableEnded) { try { connection.res.end(); } catch (e: any) { logger.warn(`Error ending response stream ${streamId}: ${e.message}`); } }
     logger.debug(`Total active SSE connections after cleanup: ${this._activeSseConnections.size}`);
+  }
+
+  /**
+   * Checks if a POST-initiated SSE connection has completed all responses.
+   * If all responses have been sent, closes the connection as per spec recommendation.
+   */
+  private checkAndCloseCompletedPostConnection(connection: ActiveSseConnection): void {
+    if (!connection.isPostConnection || !connection.pendingResponseIds) {
+      return;
+    }
+    
+    if (connection.pendingResponseIds.size > 0) {
+      return;
+    }
+    
+    logger.info(`POST-initiated SSE stream ${connection.streamId} has sent all responses. Closing as per spec recommendation.`);
+    this.cleanupConnection(connection, "All responses sent");
   }
 
   private cleanupAllConnections(): void {
@@ -493,19 +533,37 @@ export class HttpStreamTransport extends AbstractTransport {
         if (targetConnection) {
             this._requestStreamMap.delete(message.id);
             logger.debug(`Stream mode: Found target stream ${targetConnection.streamId} for response ID ${message.id}`);
+            
+            if (targetConnection.pendingResponseIds && targetConnection.pendingResponseIds.has(message.id)) {
+                targetConnection.pendingResponseIds.delete(message.id);
+                logger.debug(`Stream ${targetConnection.streamId}: Removed ID ${message.id} from pending responses. Remaining: ${targetConnection.pendingResponseIds.size}`);
+            }
         } else {
             logger.warn(`Stream mode: No active stream found mapping to response ID ${message.id}. Message dropped.`);
             return;
         }
-    }
+    } else {
+        targetConnection = Array.from(this._activeSseConnections)
+            .filter(c => {
+                return isResponse(message) ? c.isPostConnection : true;
+            })
+            .find(c => c.res && !c.res.writableEnded);
 
-    if (!targetConnection) {
-        targetConnection = Array.from(this._activeSseConnections).find(c => c.res && !c.res.writableEnded);
-        if (targetConnection) logger.debug(`Stream mode: No specific target, selected available stream ${targetConnection.streamId}`);
+        if (targetConnection) {
+            if (isResponse(message)) {
+                logger.debug(`Stream mode: Using POST-originated stream ${targetConnection.streamId} for response`);
+            } else {
+                logger.debug(`Stream mode: Selected available stream ${targetConnection.streamId} for request/notification`);
+            }
+        }
     }
 
     if (!targetConnection || !targetConnection.res || targetConnection.res.writableEnded) {
-      logger.error(`Cannot send message via SSE: No suitable stream found. Message dropped: ${JSON.stringify(message)}`);
+      if (isResponse(message)) {
+          logger.error(`Cannot send response message via SSE: No suitable POST-originated stream found. Message dropped: ${JSON.stringify(message)}`);
+      } else {
+          logger.error(`Cannot send request/notification message via SSE: No suitable stream found. Message dropped: ${JSON.stringify(message)}`);
+      }
       return;
     }
 
@@ -525,6 +583,10 @@ export class HttpStreamTransport extends AbstractTransport {
         }
         logger.debug(`Sending SSE data on stream ${targetConnection.streamId}: ${JSON.stringify(message)}`);
         targetConnection.res.write(`data: ${JSON.stringify(message)}\n\n`);
+        
+        if (isResponse(message)) {
+            this.checkAndCloseCompletedPostConnection(targetConnection);
+        }
     } catch (error: any) {
       logger.error(`Error writing to SSE stream ${targetConnection.streamId}: ${error.message}. Cleaning up connection.`);
       this.cleanupConnection(targetConnection, `Write error: ${error.message}`);
