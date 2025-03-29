@@ -25,6 +25,7 @@ program
   .option("--http", "use HTTP transport instead of default stdio")
   .option("--cors", "enable CORS with wildcard (*) access")
   .option("--port <number>", "specify HTTP port (only valid with --http)", (val) => parseInt(val, 10))
+  .option("--no-install", "skip npm install and build steps")
   .action(createProject);
 
 program
