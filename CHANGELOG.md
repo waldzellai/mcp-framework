@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.11](https://github.com/QuantGeekDev/mcp-framework/compare/mcp-framework-v0.2.10...mcp-framework-v0.2.11) (2025-03-30)
+
+
+### Features
+
+* implement resources/templates/list handler ([ff73ff0](https://github.com/QuantGeekDev/mcp-framework/commit/ff73ff084860c12a0aae15757c39ab6eeef5a543))
+* implement resources/templates/list handler ([0dabfc0](https://github.com/QuantGeekDev/mcp-framework/commit/0dabfc04370535ecbe9d31f4d2b54ac876032b93))
+
 ## [0.2.10](https://github.com/QuantGeekDev/mcp-framework/compare/mcp-framework-v0.2.9...mcp-framework-v0.2.10) (2025-03-30)
 
 
