@@ -186,14 +186,15 @@ export class HttpStreamTransport extends AbstractTransport {
           case "POST": await this.handlePost(req, res); break;
           case "GET": await this.handleGet(req, res); break;
           case "DELETE": await this.handleDelete(req, res); break;
-          default:
-             const allowHeader = this._config.enableGetSse ? 
-               'GET, POST, DELETE, OPTIONS' : 
+          default: { // Add block scope for the default case
+             const allowHeader = this._config.enableGetSse ?
+               'GET, POST, DELETE, OPTIONS' :
                'POST, DELETE, OPTIONS';
-             res.writeHead(405, { 'Content-Type': 'text/plain', 'Allow': allowHeader }); 
+             res.writeHead(405, { 'Content-Type': 'text/plain', 'Allow': allowHeader });
              res.end("Method Not Allowed");
-             logger.warn(`Unsupported method: ${req.method}`); 
+             logger.warn(`Unsupported method: ${req.method}`);
              break;
+           } // Close block scope
         }
     } catch (error: any) {
         logger.error(`Error processing ${req.method} ${url.pathname}: ${error.message}`);
