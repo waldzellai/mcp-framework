@@ -481,7 +481,6 @@ export class HttpStreamTransport extends AbstractTransport {
     if (res.socket) { res.socket.setNoDelay(true); res.socket.setKeepAlive(true); res.socket.setTimeout(0); logger.debug(`Optimized socket for SSE stream ${streamId}`); }
     else { logger.warn(`Could not access socket for SSE stream ${streamId} to optimize.`); }
     this._activeSseConnections.add(connection);
-    res.write(': stream opened\n\n');
     connection.pingInterval = setInterval(() => this.sendPing(connection), 15000);
     if (lastEventId && this._config.resumability.enabled) {
         this.handleResumption(connection, lastEventId, sessionId).catch(err => { logger.error(`Error during stream resumption for ${streamId}: ${err.message}`); this.cleanupConnection(connection, `Resumption error: ${err.message}`); });
@@ -646,7 +645,8 @@ export class HttpStreamTransport extends AbstractTransport {
   private sendPing(connection: ActiveSseConnection): void {
       if (!connection || !connection.res || connection.res.writableEnded) return;
       try {
-          connection.res.write(': keep-alive\n\n');
+          const pingMessage = { jsonrpc: "2.0", method: "ping", params: { timestamp: Date.now() } };
+          connection.res.write(`data: ${JSON.stringify(pingMessage)}\n\n`);
           logger.debug(`Sent keep-alive ping to stream ${connection.streamId}`);
       } catch (error: any) {
           logger.error(`Error sending ping to stream ${connection.streamId}: ${error.message}`);

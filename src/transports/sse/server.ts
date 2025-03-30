@@ -225,13 +225,14 @@ export class SSEServerTransport extends AbstractTransport {
     res.write(`event: endpoint\ndata: ${endpointUrl}\n\n`)
     
     logger.debug('Sending initial keep-alive')
-    res.write(": keep-alive\n\n")
+    // Removed initial keep-alive: res.write(": keep-alive\n\n")
 
     this._keepAliveInterval = setInterval(() => {
       if (this._sseResponse && !this._sseResponse.writableEnded) {
         try {
-          logger.debug('Sending keep-alive ping')
-          this._sseResponse.write(": keep-alive\n\n")
+          // Sending proper JSON-RPC ping instead of ': keep-alive' comment
+          // logger.debug('Sending keep-alive ping')
+          // this._sseResponse.write(": keep-alive\n\n")
           
           const pingMessage = {
             jsonrpc: "2.0",
