@@ -9,6 +9,7 @@ import { AbstractTransport } from "../base.js"
 import { DEFAULT_SSE_CONFIG, SSETransportConfig, SSETransportConfigInternal, DEFAULT_CORS_CONFIG, CORSConfig } from "./types.js"
 import { logger } from "../../core/Logger.js"
 import { getRequestHeader, setResponseHeaders } from "../../utils/headers.js"
+import { PING_SSE_MESSAGE } from "../utils/ping-message.js";
 
 interface ExtendedIncomingMessage extends IncomingMessage {
   body?: ClientRequest
@@ -225,20 +226,11 @@ export class SSEServerTransport extends AbstractTransport {
     res.write(`event: endpoint\ndata: ${endpointUrl}\n\n`)
     
     logger.debug('Sending initial keep-alive')
-    res.write(": keep-alive\n\n")
 
     this._keepAliveInterval = setInterval(() => {
       if (this._sseResponse && !this._sseResponse.writableEnded) {
         try {
-          logger.debug('Sending keep-alive ping')
-          this._sseResponse.write(": keep-alive\n\n")
-          
-          const pingMessage = {
-            jsonrpc: "2.0",
-            method: "ping",
-            params: { timestamp: Date.now() }
-          }
-          this._sseResponse.write(`data: ${JSON.stringify(pingMessage)}\n\n`)
+          this._sseResponse.write(PING_SSE_MESSAGE);
         } catch (error) {
           logger.error(`Error sending keep-alive: ${error}`)
           this.cleanupConnection()

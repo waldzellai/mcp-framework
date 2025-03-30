@@ -21,6 +21,7 @@ import { logger } from "../../core/Logger.js";
 import { getRequestHeader, setResponseHeaders } from "../../utils/headers.js";
 import { DEFAULT_CORS_CONFIG } from "../sse/types.js";
 import { CORSConfig } from "../sse/types.js";
+import { PING_SSE_MESSAGE } from "../utils/ping-message.js";
 
 function isRequest(msg: JsonRpcMessage): msg is JsonRpcRequest {
   return msg && 
@@ -185,14 +186,15 @@ export class HttpStreamTransport extends AbstractTransport {
           case "POST": await this.handlePost(req, res); break;
           case "GET": await this.handleGet(req, res); break;
           case "DELETE": await this.handleDelete(req, res); break;
-          default:
-             const allowHeader = this._config.enableGetSse ? 
-               'GET, POST, DELETE, OPTIONS' : 
+          default: { // Add block scope for the default case
+             const allowHeader = this._config.enableGetSse ?
+               'GET, POST, DELETE, OPTIONS' :
                'POST, DELETE, OPTIONS';
-             res.writeHead(405, { 'Content-Type': 'text/plain', 'Allow': allowHeader }); 
+             res.writeHead(405, { 'Content-Type': 'text/plain', 'Allow': allowHeader });
              res.end("Method Not Allowed");
-             logger.warn(`Unsupported method: ${req.method}`); 
+             logger.warn(`Unsupported method: ${req.method}`);
              break;
+           } // Close block scope
         }
     } catch (error: any) {
         logger.error(`Error processing ${req.method} ${url.pathname}: ${error.message}`);
@@ -481,7 +483,6 @@ export class HttpStreamTransport extends AbstractTransport {
     if (res.socket) { res.socket.setNoDelay(true); res.socket.setKeepAlive(true); res.socket.setTimeout(0); logger.debug(`Optimized socket for SSE stream ${streamId}`); }
     else { logger.warn(`Could not access socket for SSE stream ${streamId} to optimize.`); }
     this._activeSseConnections.add(connection);
-    res.write(': stream opened\n\n');
     connection.pingInterval = setInterval(() => this.sendPing(connection), 15000);
     if (lastEventId && this._config.resumability.enabled) {
         this.handleResumption(connection, lastEventId, sessionId).catch(err => { logger.error(`Error during stream resumption for ${streamId}: ${err.message}`); this.cleanupConnection(connection, `Resumption error: ${err.message}`); });
@@ -646,7 +647,7 @@ export class HttpStreamTransport extends AbstractTransport {
   private sendPing(connection: ActiveSseConnection): void {
       if (!connection || !connection.res || connection.res.writableEnded) return;
       try {
-          connection.res.write(': keep-alive\n\n');
+          connection.res.write(PING_SSE_MESSAGE);
           logger.debug(`Sent keep-alive ping to stream ${connection.streamId}`);
       } catch (error: any) {
           logger.error(`Error sending ping to stream ${connection.streamId}: ${error.message}`);
