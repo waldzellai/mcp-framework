@@ -21,6 +21,7 @@ import { logger } from "../../core/Logger.js";
 import { getRequestHeader, setResponseHeaders } from "../../utils/headers.js";
 import { DEFAULT_CORS_CONFIG } from "../sse/types.js";
 import { CORSConfig } from "../sse/types.js";
+import { PING_SSE_MESSAGE } from "../utils/ping-message.js";
 
 function isRequest(msg: JsonRpcMessage): msg is JsonRpcRequest {
   return msg && 
@@ -645,8 +646,7 @@ export class HttpStreamTransport extends AbstractTransport {
   private sendPing(connection: ActiveSseConnection): void {
       if (!connection || !connection.res || connection.res.writableEnded) return;
       try {
-          const pingMessage = { jsonrpc: "2.0", method: "ping", params: { timestamp: Date.now() } };
-          connection.res.write(`data: ${JSON.stringify(pingMessage)}\n\n`);
+          connection.res.write(PING_SSE_MESSAGE);
           logger.debug(`Sent keep-alive ping to stream ${connection.streamId}`);
       } catch (error: any) {
           logger.error(`Error sending ping to stream ${connection.streamId}: ${error.message}`);
