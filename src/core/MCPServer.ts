@@ -6,6 +6,7 @@ import {
   ListPromptsRequestSchema,
   GetPromptRequestSchema,
   ListResourcesRequestSchema,
+  ListResourceTemplatesRequestSchema,
   ReadResourceRequestSchema,
   SubscribeRequestSchema,
   UnsubscribeRequestSchema,
@@ -341,6 +342,18 @@ export class MCPServer {
           };
         }
       );
+
+      this.server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => {
+        logger.debug(`Received ListResourceTemplates request`);
+        // For now, return an empty list as requested
+        const response = {
+          resourceTemplates: [],
+          nextCursor: undefined
+        };
+        logger.debug(`Sending ListResourceTemplates response: ${JSON.stringify(response)}`);
+        return response;
+      });
+
 
       // TODO: Replace 'any' with the specific inferred request type from the SDK schema if available
       this.server.setRequestHandler(SubscribeRequestSchema, async (request: any) => {
