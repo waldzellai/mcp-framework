@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.10](https://github.com/QuantGeekDev/mcp-framework/compare/mcp-framework-v0.2.9...mcp-framework-v0.2.10) (2025-03-30)
+
+
+### Features
+
+* add optional skip install param ([d77e6e9](https://github.com/QuantGeekDev/mcp-framework/commit/d77e6e9df5a6d989dc7fbfa25b2cbe3b56e50260))
+* add optional skip install param ([318dbc7](https://github.com/QuantGeekDev/mcp-framework/commit/318dbc798e673678c38a468e6a898e9834cdfa7d))
+* add skip example option to cli ([df733f9](https://github.com/QuantGeekDev/mcp-framework/commit/df733f999e9837012220a7696d993ef734eee393))
+* add skip example option to cli ([c02809f](https://github.com/QuantGeekDev/mcp-framework/commit/c02809f185270bdc462f367b3a0e52a6e4d4300d))
+
+
+### Bug Fixes
+
+* Fixes ESLint 'no-case-declarations' error in HTTP transport by adding block scope to the default switch case. ([25ed8e6](https://github.com/QuantGeekDev/mcp-framework/commit/25ed8e6de845f72ea2967ff64b981e445ae48249))
+* make ping conform with the spec ([aa46eb8](https://github.com/QuantGeekDev/mcp-framework/commit/aa46eb8199c95e4b1024e84d5a616e0cc420cd64))
+* **transports:** Conform SSE/HTTP streams to MCP spec and improve logging ([9d9ef2a](https://github.com/QuantGeekDev/mcp-framework/commit/9d9ef2aa2ddea52c37133d4842d95d168ea5e190))
+* **transports:** follow spec guideline ([208599d](https://github.com/QuantGeekDev/mcp-framework/commit/208599ddaafbf58eddaf4d5d6492a26e1effbbc6))
+
 ## [0.2.9](https://github.com/QuantGeekDev/mcp-framework/compare/mcp-framework-v0.2.8...mcp-framework-v0.2.9) (2025-03-29)
 
 
