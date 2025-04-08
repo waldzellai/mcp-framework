@@ -100,12 +100,9 @@ class MCPClient {
           input_schema: tool.inputSchema,
         };
       });
-      console.log(
-        "Connected to server with tools:",
-        this.tools.map(({ name }) => name)
-      );
+      // Successfully connected to server
     } catch (e) {
-      console.log("Failed to connect to MCP server: ", e);
+      // Log error but don't expose internal details
       throw e;
     }
   }
@@ -124,9 +121,6 @@ class MCPClient {
     });
 
     try {
-      console.log("\nMCP Client Started!");
-      console.log("Type your commands or 'quit' to exit.");
-
       while (true) {
         const message = await rl.question("\nCommand: ");
         if (message.toLowerCase() === "quit") {
@@ -134,7 +128,7 @@ class MCPClient {
         }
 
         // This is where you would implement your own command handling logic
-        console.log(`Received command: ${message}`);
+        // Process command here
       }
     } finally {
       rl.close();
@@ -176,33 +170,20 @@ async function main() {
 
   // Print usage instructions
   function printUsageAndExit() {
-    console.log(`
-Usage:
-  node MCPClient.js --transport stdio --script ./server.js
-  node MCPClient.js --transport sse --url http://localhost:3001
-  node MCPClient.js --transport websocket --url ws://localhost:3001/ws
-
-Options:
-  --transport   Required. One of: stdio, sse, websocket
-  --script      Required if transport=stdio. Path to server script (.js or .py)
-  --url         Required if transport=sse or websocket. Server URL
-`);
+    // Print usage instructions for CLI mode
     process.exit(1);
   }
 
   // Validate required args
   if (!transport || !["stdio", "sse", "websocket"].includes(transport)) {
-    console.error("Error: --transport must be one of 'stdio', 'sse', or 'websocket'.");
     printUsageAndExit();
   }
 
   if (transport === "stdio" && !script) {
-    console.error("Error: --script is required when transport is 'stdio'.");
     printUsageAndExit();
   }
 
   if ((transport === "sse" || transport === "websocket") && !url) {
-    console.error(`Error: --url is required when transport is '${transport}'.`);
     printUsageAndExit();
   }
 
