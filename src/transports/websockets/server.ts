@@ -52,7 +52,6 @@ export class WebSocketServerTransport extends AbstractTransport {
           }
 
           this._wss!.handleUpgrade(request, socket, head, (ws: WebSocket) => {
-            ws.protocol = "mcp";
             this._wss!.emit("connection", ws, request);
           });
         });
