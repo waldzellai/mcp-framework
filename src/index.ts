@@ -1,8 +1,6 @@
 export * from "./core/MCPServer.js";
-export * from "./core/MCPServer.js";
+export * from "./core/MCPClient.js";
 export * from "./core/Logger.js";
-export { MCPClient } from "./core/MCPClient.js";
-export { MCPClientConfig } from "./core/MCPClient.js";
 
 export * from "./tools/BaseTool.js";
 export * from "./resources/BaseResource.js";
