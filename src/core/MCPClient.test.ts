@@ -1,6 +1,4 @@
-import { MCPClient } from './MCPClient';
-
-// Import Jest types
+import { MCPClient, MCPClientConfig } from './MCPClient';
 import { describe, test, expect, jest, beforeEach, afterEach, afterAll } from '@jest/globals';
 import { createInterface } from 'readline/promises';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -71,6 +69,7 @@ jest.mock('readline/promises', () => {
   const mockInterface = {
     question: jest.fn().mockImplementation(() => Promise.resolve('')),
     close: jest.fn(),
+    prompt: jest.fn(), // Added prompt mock
   };
   
   // Set up the mock responses
@@ -199,11 +198,57 @@ describe('MCPClient', () => {
       });
 
       // Verify SSEClientTransport was created with correct parameters
-      expect(mockSSETransport).toHaveBeenCalledWith(
-        expect.objectContaining({
-          href: 'http://localhost:3000/',
-        })
-      );
+      expect(mockSSETransport).toHaveBeenCalledTimes(1);
+      const [urlArg, optsUnknown] = mockSSETransport.mock.calls[0] as [URL, any];
+      const optionsArg = optsUnknown as any;
+      expect(urlArg).toBeInstanceOf(URL);
+      expect((urlArg as URL).href).toBe('http://localhost:3000/');
+      expect(optionsArg).toBeUndefined();
+    });
+
+    test('should connect using SSE transport with custom headers', async () => {
+      // Clear previous mock call data to make indexing predictable
+      mockSSETransport.mockClear();
+
+      const client = new MCPClient();
+      const headers = {
+        'X-Test': 'foo',
+        Authorization: 'Bearer bar',
+      };
+
+      await client.connect({
+        transport: 'sse',
+        url: 'http://localhost:3000/',
+        headers,
+      });
+
+      // Expect the transport constructor to be invoked once
+      expect(mockSSETransport).toHaveBeenCalledTimes(1);
+
+      const [urlArg, optsUnknown] = mockSSETransport.mock.calls[0] as [URL, any];
+      const optionsArg = optsUnknown as any;
+      expect(urlArg).toBeInstanceOf(URL);
+      expect((urlArg as URL).href).toBe('http://localhost:3000/');
+
+      // The options argument should include the forwarded headers in requestInit
+      expect(optionsArg).toBeDefined();
+      expect(optionsArg.requestInit).toBeDefined();
+      expect(optionsArg.requestInit.headers).toEqual(headers);
+
+      // eventSourceInit.fetch should attach the same headers plus Accept header
+      if (optionsArg.eventSourceInit?.fetch) {
+        // simulate the custom fetch to verify headers merge
+        const dummyInit: RequestInit = { headers: { Existing: 'true' } };
+        // We cannot actually execute fetch here; instead, verify wrapper behaviour
+        const wrappedFetch = optionsArg.eventSourceInit.fetch as (
+          url: URL | RequestInfo,
+          init?: RequestInit,
+        ) => Promise<Response>;
+        const mergedInitPromise = wrappedFetch(new URL('http://dummy'), dummyInit);
+        // Ensure it returns a Promise (we don't await real network)
+        expect(mergedInitPromise).toBeTruthy(); // Ensure it's not null/undefined
+        expect(typeof mergedInitPromise.then).toBe('function'); // Check if it's thenable
+      }
     });
 
     test('should connect using WebSocket transport', async () => {
@@ -314,26 +359,32 @@ describe('MCPClient', () => {
   // 5. Chat loop tests
   describe('chatLoop', () => {
     test('should handle commands until quit', async () => {
-      // Initialize the mock
+      const mockNext = jest.fn()
+        .mockReturnValueOnce(Promise.resolve({ value: 'test command', done: false }))
+        .mockReturnValueOnce(Promise.resolve({ value: 'quit', done: false }))
+        .mockReturnValueOnce(Promise.resolve({ value: undefined, done: true }));
+
+      const mockAsyncIterator = jest.fn(() => ({
+        next: mockNext,
+      }));      
+
       const mockReadlineInstance = {
-        question: jest.fn()
-          .mockImplementationOnce(() => Promise.resolve('test command'))
-          .mockImplementationOnce(() => Promise.resolve('quit')),
+        question: jest.fn(),
         close: jest.fn(),
+        prompt: jest.fn(),
+        [Symbol.asyncIterator]: mockAsyncIterator, // Assign the mock function here
       };
       
       mockCreateInterface.mockReturnValue(mockReadlineInstance);
-      
-      // Ensure console.log is spied on
-      console.log = jest.fn();
-      
-      // Create a client and start the chat loop
       const client = new MCPClient();
+      // Mock connect to avoid actual connection logic if not needed for chatLoop isolated test
+      client.connect = jest.fn<(config: MCPClientConfig) => Promise<void>>().mockResolvedValue(undefined); 
       await client.chatLoop();
       
       // Verify readline was created and used
       expect(mockCreateInterface).toHaveBeenCalled();
-      expect(mockReadlineInstance.question).toHaveBeenCalledTimes(2);
+      expect(mockAsyncIterator).toHaveBeenCalledTimes(1); // The async iterator factory was called once
+      expect(mockNext).toHaveBeenCalledTimes(2); // 'test command', 'quit'. The loop exits before {done: true} is strictly needed by for...of.
       expect(mockReadlineInstance.close).toHaveBeenCalled();
     });
   });

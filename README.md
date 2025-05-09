@@ -13,11 +13,6 @@ MCP-Framework gives you architecture out of the box, with automatic directory-ba
 - Easy-to-use base classes for tools, prompts, and resources
 - Out of the box authentication for SSE endpoints
 
-
-## MCP Client
-
-`MCPClient` is a TypeScript client library designed to connect to an MCP server using various transports (stdio, SSE, HTTP, or WebSockets). It provides a simple, unified API for sending requests and receiving responses, abstracting away the underlying transport details.
-
 ### Purpose
 
 - Facilitate communication with an MCP server from your application.
