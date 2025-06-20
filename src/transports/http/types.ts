@@ -58,7 +58,7 @@ export type JsonRpcMessage =
 export type HttpResponseMode = 'stream' | 'batch';
 
 /**
- * Configuration options for Streamable HTTP transport that implements the MCP 2025-03-26 spec.
+ * Configuration options for Streamable HTTP transport that implements the MCP 2025-06-18 spec.
  * 
  * This defines the options for a transport that receives messages via HTTP POST and can respond
  * with either a single JSON response or open an SSE stream for streaming responses.
