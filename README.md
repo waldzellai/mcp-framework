@@ -2,6 +2,8 @@
 
 MCP-Framework is a framework for building Model Context Protocol (MCP) servers elegantly in TypeScript.
 
+This release targets the [MCP specification version 2025-06-18](https://modelcontextprotocol.io/specification/2025-06-18), introducing support for new client features like **Roots** and **Elicitation**.
+
 MCP-Framework gives you architecture out of the box, with automatic directory-based discovery for tools, resources, and prompts. Use our powerful MCP abstractions to define tools, resources, or prompts in an elegant way. Our cli makes getting started with your own MCP server a breeze
 
 ## Features

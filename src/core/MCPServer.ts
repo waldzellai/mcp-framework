@@ -71,6 +71,10 @@ export type ServerCapabilities = {
     listChanged?: true; // Optional: Indicates support for list change notifications
     subscribe?: true;   // Optional: Indicates support for resource subscriptions
   };
+  roots?: {
+    listChanged?: true; // Optional: Indicates support for roots capability
+  };
+  elicitation?: true; // Optional: Indicates support for elicitation capability
   // Other standard capabilities like 'logging' or 'completion' could be added here if supported
 };
 

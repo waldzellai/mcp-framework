@@ -43,7 +43,7 @@
     "protocol"
   ],
   "peerDependencies": {
-    "@modelcontextprotocol/sdk": "1.11"
+    "@modelcontextprotocol/sdk": "1.13.0"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
