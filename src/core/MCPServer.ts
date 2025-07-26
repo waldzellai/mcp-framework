@@ -10,6 +10,8 @@ import {
   ReadResourceRequestSchema,
   SubscribeRequestSchema,
   UnsubscribeRequestSchema,
+  ListRootsRequestSchema,
+  ElicitRequestSchema,
   JSONRPCMessage,
 } from "@modelcontextprotocol/sdk/types.js";
 import { ToolProtocol } from "../tools/BaseTool.js";
@@ -411,6 +413,13 @@ export class MCPServer {
       logger.debug("Resources capability enabled");
     }
 
+    // Roots and elicitation are now supported by the framework
+    this.capabilities.roots = {};
+    logger.debug("Roots capability enabled");
+
+    this.capabilities.elicitation = true;
+    logger.debug("Elicitation capability enabled");
+
     (this.server as any).updateCapabilities?.(this.capabilities);
     logger.debug(`Capabilities updated: ${JSON.stringify(this.capabilities)}`);
     
@@ -515,6 +524,17 @@ export class MCPServer {
       this.isRunning = false;
       throw error;
     }
+  }
+
+  async elicitInput(message: string, requestedSchema: any) {
+    logger.debug(`Sending elicitation request: ${message}`);
+    return this.server.elicitInput({ message, requestedSchema } as any);
+  }
+
+  async listClientRoots() {
+    logger.debug('Requesting client roots');
+    const result = await this.server.listRoots();
+    return result.roots;
   }
 
   async stop() {
