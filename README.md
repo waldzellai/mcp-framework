@@ -12,6 +12,7 @@ MCP-Framework gives you architecture out of the box, with automatic directory-ba
 - Multiple transport support (stdio, SSE, HTTP Stream)
 - TypeScript-first development with full type safety
 - Built on the official MCP SDK
+- Supports new MCP features like **Roots** and **Elicitation**
 - Easy-to-use base classes for tools, prompts, and resources
 - Out of the box authentication for SSE endpoints
 
